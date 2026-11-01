@@ -71,7 +71,20 @@ O perfil `local` só funciona pelo Maven: o suporte a Docker Compose não entra 
 
 ### Tudo em containers
 
-O serviço `app` do compose constrói a imagem e sobe junto com a infraestrutura:
+O serviço `app` do compose constrói a imagem e sobe junto com a infraestrutura. Ele precisa de um segredo JWT: sem
+`APP_JWT_SECRET`, a aplicação recusa subir. Guarde o segredo num `.env` na raiz do projeto, que o compose lê sozinho
+e o Git ignora. O comando abaixo acrescenta a linha ao `.env` e cria o arquivo se ele não existir:
+
+```bash
+echo "APP_JWT_SECRET=$(openssl rand -base64 48)" >> .env
+```
+
+```bash
+docker compose --profile app up --build
+```
+
+Com o segredo fixo no `.env`, os tokens emitidos continuam válidos quando a aplicação reinicia. Para um teste rápido
+sem o arquivo, passe a variável na mesma linha; aí cada execução gera um segredo novo:
 
 ```bash
 APP_JWT_SECRET=$(openssl rand -base64 48) docker compose --profile app up --build
