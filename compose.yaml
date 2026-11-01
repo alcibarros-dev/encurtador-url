@@ -23,7 +23,7 @@ services:
       retries: 10
 
   # pgAdmin para consultar o PostgreSQL: http://localhost:16543
-  # Modo desktop (sem login); o servidor do compose já vem cadastrado, com a senha no pgpass.
+  # Modo desktop (sem login); o servidor do compose já vem cadastrado e conecta sem pedir senha.
   pgadmin:
     image: dpage/pgadmin4:9.19.0
     environment:
@@ -32,17 +32,14 @@ services:
       # A imagem exige os dois para iniciar, mas o modo desktop não os usa.
       PGADMIN_DEFAULT_EMAIL: admin@example.com
       PGADMIN_DEFAULT_PASSWORD: encurtador
-      PGPASS_FILE: /pgadmin4/pgpass
       PGADMIN_DISABLE_POSTFIX: "True"
     ports:
       - "127.0.0.1:16543:80"
     configs:
       - source: pgadmin_servers
         target: /pgadmin4/servers.json
-      - source: pgadmin_pgpass
-        target: /pgadmin4/pgpass
     volumes:
-      # Preferências e histórico de consultas. O servers.json e o pgpass só são lidos na primeira subida.
+      # Preferências e histórico de consultas. O servers.json só é lido na primeira subida.
       - pgadmin_data:/var/lib/pgadmin
 
   redis:
@@ -134,6 +131,7 @@ volumes:
   pgadmin_data:
 
 configs:
+  # PasswordExecCommand: no modo desktop, o pgAdmin roda o comando ao conectar e usa a saída como senha.
   pgadmin_servers:
     content: |
       {
@@ -145,11 +143,7 @@ configs:
             "Port": 5432,
             "MaintenanceDB": "encurtador",
             "Username": "encurtador",
-            "PassFile": "/var/lib/pgadmin/.pgpass"
+            "PasswordExecCommand": "echo encurtador"
           }
         }
       }
-  # host:porta:banco:usuário:senha (o entrypoint copia para /var/lib/pgadmin/.pgpass com permissão 600)
-  pgadmin_pgpass:
-    content: |
-      postgres:5432:*:encurtador:encurtador
