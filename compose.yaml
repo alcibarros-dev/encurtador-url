@@ -54,19 +54,22 @@ services:
       timeout: 3s
       retries: 10
 
-  # Redis Insight (versão web) para inspecionar o Redis: http://localhost:5540
-  # A conexão com o Redis já vem cadastrada; os termos de uso são aceitos na interface, na primeira abertura.
-  redisinsight:
-    image: redis/redisinsight:3.8.0
+  # Interface web para inspecionar as chaves do Redis: http://localhost:8181
+  redis-commander:
+    container_name: redis-commander
+    hostname: redis-commander
+    image: ghcr.io/joeferner/redis-commander:0.9.1
+    restart: always
     environment:
-      RI_REDIS_HOST: redis
-      RI_REDIS_PORT: "6379"
-      RI_REDIS_ALIAS: encurtador-url
+      - REDIS_HOSTS=local:redis:6379
     ports:
-      - "127.0.0.1:5540:5540"
-    volumes:
-      # Preferências e o aceite dos termos sobrevivem à recriação do container.
-      - redisinsight_data:/data
+      - "127.0.0.1:8181:8081"
+    # O healthcheck da imagem só roda a cada 60 s, e o spring-boot:run espera todos os containers ficarem saudáveis.
+    healthcheck:
+      test: ["CMD", "/redis-commander/bin/healthcheck.js"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   kafka:
     image: apache/kafka:4.4.0
@@ -139,5 +142,4 @@ services:
 volumes:
   postgres_data:
   kafka_data:
-  redisinsight_data:
   pgadmin_data:

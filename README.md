@@ -77,6 +77,28 @@ O serviço `app` do compose constrói a imagem e sobe junto com a infraestrutura
 APP_JWT_SECRET=$(openssl rand -base64 48) docker compose --profile app up --build
 ```
 
+### pgAdmin, redis-commander e Kafdrop
+
+Os três sobem junto com a infraestrutura do compose, nos dois modos acima, e só aceitam conexões desta máquina:
+
+| Ferramenta | Endereço | O que mostra |
+|---|---|---|
+| pgAdmin | http://localhost:16543 | O PostgreSQL: contas, links e cliques. Abre sem login, com o servidor `encurtador-url` já conectado |
+| redis-commander | http://localhost:8181 | O Redis: o cache de resolução (`link:v1:*`) e os contadores de rate limit (`rl:*`) |
+| Kafdrop | http://localhost:9000 | O Kafka: os tópicos `link-clicks` e `link-clicks-dlt`, suas partições e mensagens, e o atraso do consumer group `click-consumer` |
+
+- O servidor do pgAdmin vem de [docker/pgadmin/servers.json](docker/pgadmin/servers.json), lido só na primeira subida.
+  Depois de mudar o arquivo, remova o container e o volume do pgAdmin para ele importar de novo (o nome do volume
+  leva o nome da pasta do projeto):
+
+  ```bash
+  docker compose rm -sf pgadmin && docker volume rm encurtador-url_pgadmin_data
+  ```
+
+- No Redis, a chave `link:v1:{code}` só aparece depois do primeiro acesso ao link curto, e nada sobrevive a uma
+  reinicialização do container: ele roda sem persistência.
+- No Kafka, a aplicação cria os tópicos ao subir, e cada acesso a um link curto vira uma mensagem em `link-clicks`.
+
 ### Só a imagem
 
 ```bash
