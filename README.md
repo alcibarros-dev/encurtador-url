@@ -77,6 +77,9 @@ O serviço `app` do compose constrói a imagem e sobe junto com a infraestrutura
 docker compose --profile app up --build
 ```
 
+O Swagger UI fica em http://localhost:8080/swagger-ui.html: o compose liga a documentação, que a imagem deixa
+desligada por padrão.
+
 Sem `APP_JWT_SECRET`, o compose deixa o Spring gerar um segredo JWT aleatório a cada subida, e os tokens emitidos
 param de valer quando o container reinicia. Para manter as sessões entre reinicializações, guarde um segredo fixo num
 `.env` na raiz do projeto, que o compose lê sozinho e o Git ignora. O comando abaixo acrescenta a linha ao `.env` e

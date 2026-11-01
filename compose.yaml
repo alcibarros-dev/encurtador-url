@@ -128,6 +128,10 @@ services:
       # deixam de valer quando o container reinicia. Três ${random.value} somam 96 caracteres hexadecimais, que
       # decodificados como Base64 passam dos 32 bytes exigidos. A imagem em si continua recusando subir sem o segredo.
       APP_JWT_SECRET: ${APP_JWT_SECRET:-$${random.value}$${random.value}$${random.value}}
+      # Swagger UI em http://localhost:8080/swagger-ui.html. Só este compose local liga a documentação; a imagem
+      # continua com ela desligada por padrão (D9), e a segurança libera as rotas quando a propriedade está ligada.
+      SPRINGDOC_API_DOCS_ENABLED: "true"
+      SPRINGDOC_SWAGGER_UI_ENABLED: "true"
     ports:
       - "127.0.0.1:8080:8080"
       # Actuator completo: nunca publicar fora da máquina ou da rede interna (D13).
