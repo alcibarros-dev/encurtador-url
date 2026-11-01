@@ -34,6 +34,20 @@ services:
       timeout: 3s
       retries: 10
 
+  # Redis Insight (versão web) para inspecionar o Redis: http://localhost:5540
+  # A conexão com o Redis já vem cadastrada; os termos de uso são aceitos na interface, na primeira abertura.
+  redisinsight:
+    image: redis/redisinsight:3.8.0
+    environment:
+      RI_REDIS_HOST: redis
+      RI_REDIS_PORT: "6379"
+      RI_REDIS_ALIAS: encurtador-url
+    ports:
+      - "127.0.0.1:5540:5540"
+    volumes:
+      # Preferências e o aceite dos termos sobrevivem à recriação do container.
+      - redisinsight_data:/data
+
   kafka:
     image: apache/kafka:4.4.0
     environment:
@@ -93,3 +107,4 @@ services:
 volumes:
   postgres_data:
   kafka_data:
+  redisinsight_data:
