@@ -35,11 +35,11 @@ services:
       PGADMIN_DISABLE_POSTFIX: "True"
     ports:
       - "127.0.0.1:16543:80"
-    configs:
-      - source: pgadmin_servers
-        target: /pgadmin4/servers.json
     volumes:
-      # Preferências e histórico de consultas. O servers.json só é lido na primeira subida.
+      # Servidor pré-cadastrado. A senha vem do PasswordExecCommand: no modo desktop, o pgAdmin roda o comando ao
+      # conectar e usa a saída como senha. O arquivo só é lido na primeira subida (com o volume pgadmin_data vazio).
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+      # Preferências e histórico de consultas.
       - pgadmin_data:/var/lib/pgadmin
 
   redis:
@@ -129,21 +129,3 @@ volumes:
   kafka_data:
   redisinsight_data:
   pgadmin_data:
-
-configs:
-  # PasswordExecCommand: no modo desktop, o pgAdmin roda o comando ao conectar e usa a saída como senha.
-  pgadmin_servers:
-    content: |
-      {
-        "Servers": {
-          "1": {
-            "Name": "encurtador-url",
-            "Group": "Servers",
-            "Host": "postgres",
-            "Port": 5432,
-            "MaintenanceDB": "encurtador",
-            "Username": "encurtador",
-            "PasswordExecCommand": "echo encurtador"
-          }
-        }
-      }
