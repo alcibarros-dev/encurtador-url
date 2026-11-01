@@ -98,6 +98,18 @@ services:
       retries: 10
       start_period: 15s
 
+  # Kafdrop para ler tópicos, partições, mensagens e consumer groups do Kafka: http://localhost:9000
+  kafdrop:
+    image: obsidiandynamics/kafdrop:4.3.1
+    environment:
+      # Listener DOCKER: o PLAINTEXT anuncia localhost:9092, que dentro de outro container não leva ao Kafka.
+      KAFKA_BROKERCONNECT: kafka:29092
+    ports:
+      - "127.0.0.1:9000:9000"
+    depends_on:
+      kafka:
+        condition: service_started
+
   app:
     profiles: ["app"]
     build: .
