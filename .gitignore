@@ -2,7 +2,9 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 
 ### IDEs ###
-.idea/
+# Do IntelliJ, só as Run Configurations são compartilhadas.
+.idea/*
+!.idea/runConfigurations/
 *.iml
 *.iws
 *.ipr
