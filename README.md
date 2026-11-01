@@ -1,8 +1,7 @@
 # Encurtador de URLs
 
 Encurtador de links com contas de usuário, cache de resolução no Redis e estatísticas de cliques assíncronas via
-Kafka. É a reescrita completa do projeto
-[Antony-Reis/encurtadorUrl](https://github.com/Antony-Reis/encurtadorUrl), feita a partir de um ADR revisado antes da
+Kafka, feita a partir de um ADR revisado antes da
 primeira linha de código: [docs/adr/0001-arquitetura-encurtador-url.md](docs/adr/0001-arquitetura-encurtador-url.md).
 
 **O que ele faz**
@@ -153,6 +152,10 @@ curl -si localhost:8080/meu-artigo
 
 ```bash
 curl -s "localhost:8080/api/v1/links/meu-artigo/stats?tz=America/Sao_Paulo" -H "Authorization: Bearer $TOKEN"
+```
+
+```bash
+curl -s -X DELETE "localhost:8080/api/v1/links/meu-artigo" -H "Authorization: Bearer $TOKEN"
 ```
 
 | Método | Caminho | Auth | Sucesso | Erros principais |
