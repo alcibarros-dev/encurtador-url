@@ -22,7 +22,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # pgAdmin para consultar o PostgreSQL: http://localhost:5050
+  # pgAdmin para consultar o PostgreSQL: http://localhost:16543
   # Modo desktop (sem login); o servidor do compose já vem cadastrado, com a senha no pgpass.
   pgadmin:
     image: dpage/pgadmin4:9.19.0
@@ -35,7 +35,7 @@ services:
       PGPASS_FILE: /pgadmin4/pgpass
       PGADMIN_DISABLE_POSTFIX: "True"
     ports:
-      - "127.0.0.1:5050:80"
+      - "127.0.0.1:16543:80"
     configs:
       - source: pgadmin_servers
         target: /pgadmin4/servers.json
