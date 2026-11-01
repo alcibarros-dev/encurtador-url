@@ -1,0 +1,16 @@
+# Só o necessário para o build: pom.xml, wrapper e src/.
+target/
+.git/
+.github/
+.idea/
+.vscode/
+.settings/
+*.iml
+docs/
+compose.yaml
+Dockerfile
+.dockerignore
+README.md
+.env
+.env.*
+.mise.toml

@@ -1,0 +1,19 @@
+target/
+.mvn/wrapper/maven-wrapper.jar
+
+### IDEs ###
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
+### Sistema ###
+.DS_Store
+
+### Segredos locais ###
+.env

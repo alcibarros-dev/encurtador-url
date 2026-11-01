@@ -1,0 +1,26 @@
+# Perfil dos testes de integração: a infraestrutura vem do Testcontainers (@ServiceConnection).
+management:
+  server:
+    port: 0
+
+logging:
+  structured:
+    format:
+      console: ""
+
+app:
+  jwt:
+    secret: j+ayBXFkZY6pQhXDjY9EwKbWMGAl4taU/uwaUWNb7Ac9ql/o3Zt8tB5CE0otK1a5
+  # Curto para que o disjuntor feche logo depois dos testes de degradação, sem atrasar as classes seguintes.
+  redis-guard:
+    open-duration: 1s
+  # Todos os testes saem do mesmo IP: com os limites reais, uma classe esgotaria a cota da seguinte. O teste do rate
+  # limit preenche o contador até o limite em vez de depender destes números.
+  rate-limit:
+    login: { requests: 1000000 }
+    login-email: { requests: 1000000 }
+    register: { requests: 1000000 }
+    refresh: { requests: 1000000 }
+    password-change: { requests: 1000000 }
+    link-creation: { requests: 1000000 }
+    redirect: { requests: 1000000 }

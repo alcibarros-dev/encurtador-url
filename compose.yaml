@@ -1,0 +1,95 @@
+# Infraestrutura local (perfil "local"). Imagens fixadas por versão e portas presas a 127.0.0.1 (ADR-0001, D15).
+# O PostgreSQL usa a porta 5433 no host para não conflitar com outros bancos locais na 5432.
+#
+# O serviço "app" (a aplicação em container) só sobe com o profile do compose:
+#   APP_JWT_SECRET=$(openssl rand -base64 48) docker compose --profile app up --build
+# Sem o profile, o compose sobe só a infraestrutura, que é o que o perfil "local" do Spring Boot usa.
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: encurtador
+      POSTGRES_USER: encurtador
+      POSTGRES_PASSWORD: encurtador
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      # A partir do PostgreSQL 18 a imagem guarda os dados em /var/lib/postgresql/<versão>/docker.
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U encurtador -d encurtador"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8.8.4-alpine
+    # Cache e contadores de rate limit: sem persistência de propósito (ADR-0001, D7).
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:4.4.0
+    environment:
+      CLUSTER_ID: i-Hn_d5pTn-CUcFPTSbtyQ
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      # PLAINTEXT para quem está no host (localhost:9092); DOCKER para os containers da rede do compose.
+      KAFKA_LISTENERS: PLAINTEXT://:9092,DOCKER://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,DOCKER://kafka:29092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,DOCKER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "127.0.0.1:9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+
+  app:
+    profiles: ["app"]
+    build: .
+    image: encurtador-url:local
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/encurtador
+      SPRING_DATASOURCE_USERNAME: encurtador
+      SPRING_DATASOURCE_PASSWORD: encurtador
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_BASE_URL: http://localhost:8080
+      # Sem padrão: sem o segredo, a aplicação recusa subir (fail fast).
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-}
+    ports:
+      - "127.0.0.1:8080:8080"
+      # Actuator completo: nunca publicar fora da máquina ou da rede interna (D13).
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Não espera o Kafka ficar saudável: a aplicação sobe e redireciona sem ele (RNF02).
+      kafka:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  kafka_data:

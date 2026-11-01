@@ -1,0 +1,26 @@
+# Perfil de desenvolvimento: sobe o compose.yaml automaticamente e liga o Swagger.
+# Uso: ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+spring:
+  docker:
+    compose:
+      enabled: true
+      lifecycle-management: start-only
+  kafka:
+    # O suporte a Docker Compose do Spring Boot não cria conexão para o Kafka (ADR-0001, D15).
+    bootstrap-servers: localhost:9092
+
+logging:
+  structured:
+    format:
+      console: ""
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+app:
+  jwt:
+    # SOMENTE para desenvolvimento local. Nunca reutilize este valor fora do perfil "local".
+    secret: 8U+OceFHBRyVlenYkw4VmN3lsejqOsEET9Dqq4zPMYkQcPQ5MRYFuNAcLlzuHfDH
