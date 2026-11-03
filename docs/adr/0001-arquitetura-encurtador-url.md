@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-10-31), após a revisão 1 · plano de implementação concluído (F0 a F6) |
+| Status | **Aceito** (2026-10-31), após a revisão 1 · plano de implementação concluído (F0 a F6) · D2 e D9 substituídas pelos ADRs 0002 e 0003 (aceitos em 2026-11-02; o 0002 implementado, o 0003 pendente); as decisões ajustadas por eles têm uma nota no início |
 | Data | 2026-10-31 (rev. 1 e aceite no mesmo dia) |
 | Escopo | Reescrita completa do projeto `Antony-Reis/encurtadorUrl` |
 | Stack | Java 25 · Spring Boot 4.1.2 · PostgreSQL 18 · Redis 8 · Kafka 4.4 |
@@ -69,7 +69,7 @@ assíncronas) e corrige os problemas por construção.
 | ID | Requisito |
 |---|---|
 | RF01 | Cadastrar usuário com e-mail e senha |
-| RF02 | Autenticar (login), renovar sessão (refresh) e encerrar sessão (logout) |
+| RF02 | Autenticar (login), renovar sessão (refresh) e encerrar sessão (logout). Ajustado pelo ADR-0003: login e logout no `auth-server`; refresh fora da v1 |
 | RF03 | Trocar a própria senha informando a senha atual |
 | RF04 | Criar link curto a partir de uma URL longa, com alias personalizado e expiração opcionais |
 | RF05 | Redirecionar `GET /{code}` para o destino |
@@ -180,6 +180,9 @@ Cada decisão segue o formato: contexto → opções → decisão → consequên
 
 ### D1 — Plataforma e stack
 
+> **Ajustada pelo ADR-0003** (2026-11-02): o `auth-server` acrescenta o starter do Spring Authorization Server e o
+> Thymeleaf.
+
 **Contexto.** Requisito do usuário: Java com Spring Boot. O ambiente local tem Java 21 (Corretto) e Maven 3.9 via
 mise/Homebrew.
 
@@ -233,6 +236,9 @@ Convenção: identificadores de código em inglês; documentação e mensagens d
   Java 25.
 
 ### D2 — Estrutura: monólito modular por funcionalidade
+
+> **Substituída pelo ADR-0002** (2026-11-02) quanto à estrutura física e às dependências entre módulos. As regras
+> desta decisão que continuam valendo estão listadas no §7 do ADR-0002.
 
 **Contexto.** O original organizava por domínio, mas os serviços acessavam `SecurityContextHolder` diretamente, havia
 código duplicado entre módulos e acoplamento implícito.
@@ -373,6 +379,9 @@ confiáveis). Crawlers de pré-visualização (WhatsApp, Slack) contam como cliq
 cliques tardios). Listagens filtram `DELETED`.
 
 ### D6 — Persistência e modelo de dados
+
+> **Ajustada pelo ADR-0003** (D7, D8): `users` vira `accounts`, sem senha nem e-mail; credenciais e autorizações vão
+> para o schema `auth` do `auth-server`.
 
 **Opções.** JPA puro · Spring Data JDBC · jOOQ · JPA + `JdbcClient` pontual.
 
@@ -543,6 +552,10 @@ interface `ClickRecorder` sem tocar no redirect.
 
 ### D9 — Autenticação e autorização
 
+> **Substituída pelo ADR-0003** (2026-11-02), exceto a tabela de autorização das rotas e as respostas 401/403 em
+> ProblemDetail, que continuam. O ADR-0002 (D3, D5) passa a declaração das rotas públicas e das regras de limite para
+> os módulos, e a tradução do `sub` para o `UserIdResolver`.
+
 **Opções.** Filtro JWT customizado (original) · Spring Security OAuth2 Resource Server com JWT emitido pela própria
 aplicação · IdP externo (Keycloak) · sessão com cookie.
 
@@ -620,6 +633,8 @@ controllers). Um IdP externo fica como evolução.
 
 ### D10 — Validação de entrada e do destino
 
+> **Ajustada pelo ADR-0003** (D9): o `HostClassifier` também recusa o host do `auth-server`.
+
 **Decisão.**
 - DTOs são records com Bean Validation; `@Valid` gera 400 com a lista de campos inválidos (corrige S1).
 - O destino é o value object de domínio `TargetUrl` (não só anotação), com estas regras:
@@ -655,6 +670,9 @@ precisam informar domínios internacionais em Punycode (limitação documentada;
 
 ### D11 — Proteção contra abuso
 
+> **Ajustada pelo ADR-0002** (D5: regras declaradas pelos módulos, filtro registrado pelo `app` fora da cadeia de
+> segurança) **e pelo ADR-0003** (D9: limites de login, cadastro, refresh e troca de senha passam para o `auth-server`).
+
 **Opções.** Bucket4j com backend Redis · janela fixa própria em Redis · rate limit apenas no proxy/gateway.
 
 **Decisão.** Janela fixa própria em Redis, com `INCR` + `PEXPIRE` atômicos via script Lua de poucas linhas, protegido
@@ -686,6 +704,9 @@ pelo mesmo `RedisGuard` do D7.
 janela (aceito). Bucket4j é a evolução natural se for preciso token bucket.
 
 ### D12 — Contrato da API e erros
+
+> **Ajustada pelo ADR-0003** (D10): saem `/api/v1/auth/*` e `/api/v1/users/me/password`; os endpoints de protocolo do
+> `auth-server` usam o formato de erro do OAuth.
 
 **Decisão.**
 - Versionamento por URL (`/api/v1`). Corpos sem `HttpStatus` embutido (o status é o do HTTP).
@@ -730,6 +751,9 @@ Formatos:
 
 ### D13 — Observabilidade
 
+> **Ajustada pelo ADR-0003** (D2): o `auth-server` segue a mesma observabilidade e nunca registra credenciais nem
+> códigos.
+
 **Decisão.**
 - **Porta de gestão separada** (`management.server.port=8081`, publicada só internamente) com `health`, `info`,
   `metrics` e `prometheus`. Na porta pública ficam apenas `/livez` e `/readyz`.
@@ -751,6 +775,9 @@ Formatos:
 - `server.shutdown=graceful`.
 
 ### D14 — Estratégia de testes
+
+> **Ajustada pelo ADR-0002** (D6, D7: testes de integração no `app`, gate no módulo `coverage`) **e pelo ADR-0003**
+> (D12: cenários redistribuídos; 8 e 12 ficam fora da v1, sem refresh token).
 
 **Decisão.** Pirâmide com infraestrutura real nos testes de integração:
 
@@ -793,6 +820,9 @@ Surefire, ou `merge` de Surefire e Failsafe). `./mvnw verify` só exige Docker.
 `GenericContainer` precisa de `@ServiceConnection(name = "redis")`. Tudo isso é validado no spike da F0.
 
 ### D15 — Configuração, ambientes e infraestrutura local
+
+> **Ajustada pelo ADR-0002** (D9: Dockerfile por módulo, jar `exec`, CI) **e pelo ADR-0003** (D5, D11: sai o
+> `APP_JWT_SECRET`; entram as variáveis e o serviço do `auth-server` no compose).
 
 **Decisão.**
 - Propriedades tipadas em `@ConfigurationProperties("app")` com `@Validated` (fail fast no startup): `baseUrl`,
@@ -838,10 +868,10 @@ Surefire, ou `merge` de Surefire e Failsafe). `./mvnw verify` só exige Docker.
 | R2 | Java 25 ainda não instalado no ambiente | Instalação via mise na F0; fallback para Java 21 exigiria tratar *pinning* e trocar `InetAddress.ofLiteral` por parser próprio |
 | R3 | APIs novas ou recém-alteradas: `NimbusJwtEncoder.withSecretKey`, Testcontainers 2.x, módulos de tracing do Boot 4 | Spike na F0, antes de qualquer código de negócio |
 | R4 | Perda de cliques na fila em memória num crash | Aceito e documentado; métricas de descarte |
-| R5 | HS256 com segredo compartilhado | RS256/JWKS se surgirem outros serviços |
+| R5 | HS256 com segredo compartilhado | Resolvido pelo ADR-0003: RS256 com JWKS |
 | R6 | Janela fixa permite rajadas 2× | Aceito; Bucket4j como evolução |
 | R7 | 409 no cadastro permite enumerar e-mails | Aceito, mitigado por rate limit |
-| R8 | Renovações concorrentes do mesmo refresh token derrubam a sessão | Aceito; clientes serializam o refresh |
+| R8 | Renovações concorrentes do mesmo refresh token derrubam a sessão | Aceito; clientes serializam o refresh. Deixa de existir na v1 do ADR-0003, sem refresh token |
 
 ## 6. Rastreabilidade: problemas do original → decisões
 

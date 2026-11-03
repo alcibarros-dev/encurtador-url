@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="encurtador-url (local, debug)" type="Application" factoryName="Application">
     <option name="MAIN_CLASS_NAME" value="br.com.encurtador.EncurtadorApplication" />
-    <module name="encurtador-url" />
+    <module name="encurtador-url-app" />
     <shortenClasspath name="ARGS_FILE" />
     <option name="VM_PARAMETERS" value="-Dspring.profiles.active=local" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />

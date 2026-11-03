@@ -1,22 +1,30 @@
 # syntax=docker/dockerfile:1
-# Imagem da aplicação (ADR-0001, D15): build com o Maven Wrapper, runtime só com a JRE e usuário sem privilégios.
-# Uso: docker build -t encurtador-url .
+# Imagem de uma aplicação do repositório (ADR-0001, D15; ADR-0002, D9): build com o Maven Wrapper, runtime só com a
+# JRE e usuário sem privilégios.
+# Uso: docker build -t encurtador-url .                      (MODULE=app, o padrão)
+#      docker build --build-arg MODULE=<módulo> -t <imagem> .
 
 FROM eclipse-temurin:25.0.5_8-jdk-noble AS build
+ARG MODULE=app
 WORKDIR /build
 
-# Dependências numa camada própria: mudar só o código não baixa tudo de novo.
+# Dependências numa camada própria: mudar só o código não baixa tudo de novo. Os poms de todos os módulos entram
+# antes das fontes, nas mesmas pastas.
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
+COPY --parents */pom.xml */*/pom.xml ./
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q dependency:go-offline
 
 # Os testes precisam de Docker (Testcontainers) e rodam no CI com ./mvnw verify, não dentro do build da imagem.
-COPY src/ src/
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q package -DskipTests \
-    && cp target/encurtador-url-*.jar application.jar \
+COPY --parents */src */*/src ./
+RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q package -DskipTests -pl ${MODULE} -am \
+    && cp ${MODULE}/target/*-exec.jar application.jar \
     && java -Djarmode=tools -jar application.jar extract --layers --destination extracted
 
 FROM eclipse-temurin:25.0.5_8-jre-noble
+# Portas da aplicação: HTTP (também a do HEALTHCHECK) e de gestão.
+ARG HTTP_PORT=8080
+ARG MANAGEMENT_PORT=8081
 
 # curl só para o HEALTHCHECK: a imagem da JRE não traz curl nem wget.
 RUN apt-get update \
@@ -33,13 +41,14 @@ COPY --from=build /build/extracted/snapshot-dependencies/ ./
 COPY --from=build /build/extracted/application/ ./
 
 USER app:app
-# 8080: API e redirecionamento. 8081: actuator completo, só para a rede interna (D13).
-EXPOSE 8080 8081
-ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+# No app, 8080: API e redirecionamento; 8081: actuator completo, só para a rede interna (D13).
+EXPOSE ${HTTP_PORT} ${MANAGEMENT_PORT}
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError" \
+    HEALTHCHECK_PORT=${HTTP_PORT}
 
 # /livez, e não /actuator/health: Redis e Kafka entram no health completo, e a queda deles não pode reiniciar a
 # aplicação, que continua redirecionando sem eles (D13, RNF02).
 HEALTHCHECK --interval=10s --timeout=3s --start-period=60s --retries=3 \
-    CMD curl -fsS http://localhost:8080/livez > /dev/null || exit 1
+    CMD curl -fsS "http://localhost:${HEALTHCHECK_PORT}/livez" > /dev/null || exit 1
 
 ENTRYPOINT ["java", "-jar", "application.jar"]

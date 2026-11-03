@@ -31,7 +31,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
-          path: target/site/jacoco/
+          path: coverage/target/site/jacoco-aggregate/
           if-no-files-found: ignore
 
   image:

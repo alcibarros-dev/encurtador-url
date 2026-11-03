@@ -22,18 +22,41 @@ Redis 8 · Kafka 4.4 (KRaft) · Flyway · Spring Modulith · springdoc-openapi �
 
 ## Arquitetura
 
-Monólito modular: um pacote por funcionalidade, com as fronteiras verificadas pelo Spring Modulith a cada build.
+Monólito modular dividido em módulos Maven ([ADR-0002](docs/adr/0002-modulos-maven.md)): plataforma técnica de um
+lado, negócio do outro, e uma aplicação que junta tudo.
 
 ```text
-br.com.encurtador
-├── identity    contas, credenciais e sessões
-├── link        criação, listagem e remoção de links; validação do destino
-├── redirect    GET /{code}: cache-aside no Redis, tombstones, invalidação após o commit
-├── analytics   fila em memória → Kafka → consumidor idempotente → estatísticas
-└── shared      erros RFC 9457, segurança, disjuntor do Redis, rate limit, tempo
+encurtador-url/
+├── platform/
+│   ├── shared/         erros RFC 9457, tempo, UUIDv7, disjuntor do Redis
+│   ├── ratelimit/      janela fixa no Redis (Lua) e o filtro que aplica as regras de cada módulo
+│   ├── security-api/   contratos de segurança, sem framework: @CurrentUser, UserIdResolver, PublicRoutes
+│   └── security/       validação do token, cadeia de filtros, respostas 401 e 403
+├── modules/
+│   ├── link/           criação, listagem e remoção de links; validação do destino
+│   ├── analytics/      fila em memória → Kafka → consumidor idempotente → estatísticas
+│   └── redirect/       GET /{code}: cache-aside no Redis, tombstones, invalidação após o commit
+├── app/                classe principal, configuração, migrações, testes de integração e o identity
+│                       (contas, credenciais e sessões, que sai para um servidor de autorização no ADR-0003)
+└── coverage/           sem código: o gate de cobertura de todos os módulos
 ```
 
-Dependências permitidas: `redirect → link, analytics` · `analytics → link` · `link`, `identity → shared`.
+Dependências entre módulos:
+
+| Módulo | Depende de |
+|---|---|
+| `shared`, `security-api` | — |
+| `ratelimit` | `shared` |
+| `security` | `security-api`, `shared` |
+| `link` | `security-api`, `ratelimit`, `shared` |
+| `analytics` | `link`, `security-api`, `shared` |
+| `redirect` | `link`, `analytics`, `security-api`, `ratelimit`, `shared` |
+| `app`, `coverage` | todos |
+
+O Maven barra na compilação um import de módulo não declarado. O Spring Modulith continua verificando a cada build o
+que o Maven não vê: os subpacotes de cada módulo são internos, e só o pacote raiz é API. O `security` não conhece os
+módulos de negócio nem quem emite o token: cada módulo declara as próprias rotas públicas e regras de rate limit, e o
+provedor de identidade traduz o `sub` do token no id do usuário.
 
 Caminho do redirecionamento:
 
@@ -66,7 +89,8 @@ desenvolvimento:
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Actuator: http://localhost:8081/actuator/health
 
-O perfil `local` só funciona pelo Maven: o suporte a Docker Compose não entra no jar empacotado.
+O comando roda na raiz: o Maven compila os módulos e sobe só o `app`, com o diretório de trabalho na raiz, onde fica
+o `compose.yaml`. O perfil `local` só funciona pelo Maven: o suporte a Docker Compose não entra no jar empacotado.
 
 ### Tudo em containers
 
@@ -115,6 +139,9 @@ Os três sobem junto com a infraestrutura do compose, nos dois modos acima, e s�
 ```bash
 docker build -t encurtador-url .
 ```
+
+O Dockerfile serve para qualquer aplicação do repositório: `--build-arg MODULE=<módulo>` escolhe qual (o padrão é
+`app`), e `HTTP_PORT` e `MANAGEMENT_PORT` ajustam as portas do `EXPOSE` e do `HEALTHCHECK`.
 
 A imagem roda como usuário sem privilégios, tem `HEALTHCHECK` em `/livez` e recebe a configuração por variáveis de
 ambiente:
@@ -192,9 +219,16 @@ Limites padrão (`app.rate-limit.*`):
 ./mvnw verify
 ```
 
-Só exige Docker: o Testcontainers sobe PostgreSQL, Redis, Kafka e Toxiproxy reais. O build roda os testes unitários,
-os de integração, a verificação de módulos do Spring Modulith e o gate de cobertura (JaCoCo, mínimo de 80% de linhas
-fora de configuração; hoje em torno de 98%).
+Só exige Docker: o Testcontainers sobe PostgreSQL, Redis, Kafka e Toxiproxy reais. O build roda os testes unitários
+de cada módulo, os de integração (no `app`, porque sobem a aplicação inteira), a verificação de módulos do Spring
+Modulith e o gate de cobertura (JaCoCo, mínimo de 80% de linhas fora de configuração; hoje em torno de 98%). O gate e
+o relatório ficam no módulo `coverage`, que junta a cobertura de todos: `coverage/target/site/jacoco-aggregate/`.
+
+Para testar um módulo sozinho, com os módulos de que ele depende:
+
+```bash
+./mvnw -pl modules/link -am test
+```
 
 Além dos fluxos da API, os testes cobrem os cenários de falha do ADR:
 

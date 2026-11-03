@@ -1,5 +1,5 @@
-# Só o necessário para o build: pom.xml, wrapper e src/.
-target/
+# Só o necessário para o build: os poms, o wrapper e as pastas src/ dos módulos.
+**/target/
 .git/
 .github/
 .idea/
