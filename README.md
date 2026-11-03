@@ -1,8 +1,12 @@
 # Encurtador de URLs
 
 Encurtador de links com contas de usuário, cache de resolução no Redis e estatísticas de cliques assíncronas via
-Kafka, feita a partir de um ADR revisado antes da
-primeira linha de código: [docs/adr/0001-arquitetura-encurtador-url.md](docs/adr/0001-arquitetura-encurtador-url.md).
+Kafka, feita a partir de ADRs revisados antes da primeira linha de código:
+
+- [ADR-0001](docs/adr/0001-arquitetura-encurtador-url.md): arquitetura e decisões da reescrita (implementado);
+- [ADR-0002](docs/adr/0002-modulos-maven.md): divisão em módulos Maven (implementado);
+- [ADR-0003](docs/adr/0003-servidor-de-autorizacao.md): servidor de autorização com o Spring Authorization Server
+  (aceito, implementação pendente).
 
 **O que ele faz**
 
@@ -69,7 +73,9 @@ GET /{code} → rate limit (Redis) → cache (Redis) ─ miss/erro/disjuntor abe
 
 O Redis fica atrás de um disjuntor: com timeouts de 100 ms e 5 falhas seguidas, ele é ignorado por 5 s, e o
 redirecionamento segue pelo banco. O redirect nunca espera o Kafka. Os motivos de cada escolha, as alternativas
-descartadas e as notas de implementação de cada fase estão no [ADR](docs/adr/0001-arquitetura-encurtador-url.md).
+descartadas e as notas de implementação de cada fase estão nos ADRs: o
+[0001](docs/adr/0001-arquitetura-encurtador-url.md) para a arquitetura e o [0002](docs/adr/0002-modulos-maven.md) para
+a divisão em módulos.
 
 ## Como rodar
 
@@ -82,7 +88,7 @@ O perfil `local` sobe o PostgreSQL, o Redis e o Kafka do `compose.yaml`, liga o 
 desenvolvimento:
 
 ```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+./mvnw spring-boot:run
 ```
 
 - API: http://localhost:8080
@@ -90,7 +96,18 @@ desenvolvimento:
 - Actuator: http://localhost:8081/actuator/health
 
 O comando roda na raiz: o Maven compila os módulos e sobe só o `app`, com o diretório de trabalho na raiz, onde fica
-o `compose.yaml`. O perfil `local` só funciona pelo Maven: o suporte a Docker Compose não entra no jar empacotado.
+o `compose.yaml`. O perfil Maven `local`, ativo por padrão, liga o perfil `local` do Spring Boot; outro perfil do
+Spring entra com `-Dspring-boot.run.profiles=<perfil>`. O perfil `local` só funciona pelo Maven ou pela IDE: o suporte
+a Docker Compose não entra no jar empacotado.
+
+No IntelliJ, duas Run Configurations vêm com o repositório, em `.idea/runConfigurations/`:
+
+| Configuração | O que faz |
+|---|---|
+| `encurtador-url (local)` | Roda `spring-boot:run -pl app -am` pelo Maven na raiz, com o perfil Maven `local`: compila só o `app` e os módulos de que ele depende |
+| `encurtador-url (local, debug)` | Sobe `EncurtadorApplication` direto pela IDE, no módulo `encurtador-url-app`, com o perfil `local`, para depurar com breakpoints |
+
+As duas usam o JDK do projeto, que precisa ser o 25.
 
 ### Tudo em containers
 
@@ -185,6 +202,10 @@ curl -s "localhost:8080/api/v1/links/meu-artigo/stats?tz=America/Sao_Paulo" -H "
 curl -s -X DELETE "localhost:8080/api/v1/links/meu-artigo" -H "Authorization: Bearer $TOKEN"
 ```
 
+## O que cada módulo expõe
+
+**identity** (`app/`, sai para o servidor de autorização no ADR-0003): contas, credenciais e sessões
+
 | Método | Caminho | Auth | Sucesso | Erros principais |
 |---|---|---|---|---|
 | POST | `/api/v1/auth/register` | — | 201 | 400, 409 `EMAIL_TAKEN`, 429 |
@@ -192,11 +213,41 @@ curl -s -X DELETE "localhost:8080/api/v1/links/meu-artigo" -H "Authorization: Be
 | POST | `/api/v1/auth/refresh` | refresh token | 200 | 401 `INVALID_REFRESH_TOKEN`, 429 |
 | POST | `/api/v1/auth/logout` | refresh token | 204 | — |
 | PUT | `/api/v1/users/me/password` | Bearer | 204 | 400, 401, 422 `WRONG_CURRENT_PASSWORD`, 429 |
+
+**link** (`modules/link/`): criação, listagem, consulta e remoção de links
+
+| Método | Caminho | Auth | Sucesso | Erros principais |
+|---|---|---|---|---|
 | POST | `/api/v1/links` | Bearer | 201 | 400, 409 `ALIAS_TAKEN` / `LINK_QUOTA_EXCEEDED`, 429, 503 |
 | GET | `/api/v1/links?page&size` | Bearer | 200 | 400 |
 | GET | `/api/v1/links/{code}` | Bearer | 200 | 404 |
 | DELETE | `/api/v1/links/{code}` | Bearer | 204 | 404 |
+
+**analytics** (`modules/analytics/`): cliques nos links e suas estatísticas
+
+Rotas HTTP:
+
+| Método | Caminho | Auth | Sucesso | Erros principais |
+|---|---|---|---|---|
 | GET | `/api/v1/links/{code}/stats?from&to&tz` | Bearer | 200 | 400, 404 |
+
+Consumidores Kafka:
+
+| Listener | Tópico | Grupo | Mensagem | Erros |
+|---|---|---|---|---|
+| `ClickConsumer` (`@KafkaListener` `click-consumer`) | `link-clicks` (3 partições, chave = id do link) | `click-consumer` | `LinkClicked` em JSON (`v`, `eventId`, `linkId`, `occurredAt`, `referrerHost`), gravado em `click_events` | 2 novas tentativas com 1 s de intervalo, depois `link-clicks-dlt`; JSON ilegível, versão desconhecida e link inexistente vão direto para a DLT |
+
+- Quem publica em `link-clicks` é o `ClickSender`, também do `analytics`, a partir da fila em memória que o
+  `redirect` alimenta a cada `GET /{code}`. O redirect nunca espera o Kafka.
+- O consumo é idempotente: o mesmo `eventId` entregue duas vezes gera um único registro.
+- Ninguém consome a `link-clicks-dlt`: ela guarda as mensagens recusadas para inspeção (no Kafdrop, por exemplo),
+  e não há reprocessamento na v1.
+- Os tópicos são criados pela aplicação ao subir (`app.analytics.topic`, `app.analytics.dead-letter-topic`).
+
+**redirect** (`modules/redirect/`): o redirecionamento
+
+| Método | Caminho | Auth | Sucesso | Erros principais |
+|---|---|---|---|---|
 | GET, HEAD | `/{code}` | — | 302 | 404, 410 `LINK_EXPIRED` / `LINK_DELETED`, 429 |
 
 Todo erro é `application/problem+json` (RFC 9457) com um `code` estável e, em `VALIDATION_FAILED`, a lista
