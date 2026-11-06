@@ -145,9 +145,9 @@ fixada em `.mise.toml`.
 
 ### Desenvolvimento
 
-O perfil `local` sobe o PostgreSQL, o Redis e o Kafka do `compose.yaml` e liga o Swagger UI. São três aplicações,
-cada uma num terminal: o servidor de autorização, que emite os tokens, a API, que os valida, e o BFF, que serve o
-painel.
+O perfil `local` sobe a infraestrutura do `compose.yaml` (PostgreSQL, Redis, Kafka e as ferramentas de inspeção) e
+liga o Swagger UI. São três aplicações, cada uma num terminal: o servidor de autorização, que emite os tokens, a API,
+que os valida, e o BFF, que serve o painel.
 
 ```bash
 ./mvnw -pl apps/auth-server -am spring-boot:run
@@ -161,12 +161,7 @@ painel.
 ./mvnw -pl apps/bff -am spring-boot:run
 ```
 
-- API: http://localhost:8080
-- Swagger UI: http://localhost:8080/swagger-ui.html (o botão Authorize faz login no `auth-server` pelo fluxo de
-  código com PKCE, com o cliente `encurtador-dev`)
-- Actuator: http://localhost:8081/actuator/health
-- `auth-server`: http://localhost:8090 (cadastro em `/register`); actuator em http://localhost:8091
-- Painel: http://localhost:8070; actuator do BFF em http://localhost:8071
+As portas de cada aplicação e os endereços das ferramentas estão em [Endereços](#endereços).
 
 Para mexer no Angular com recarga automática, o `ng serve` sobe o painel em http://localhost:4200, repassando `/api`,
 `/bff`, `/oauth2` e `/login` ao BFF (que precisa estar no ar). O Node é o 26, fixado no `.mise.toml`:
@@ -225,9 +220,6 @@ container antigo continua segurando a porta 8080, e o serviço `api` não sobe. 
 docker compose --profile app down --remove-orphans
 ```
 
-O Swagger UI fica em http://localhost:8080/swagger-ui.html: o compose liga a documentação, que a imagem deixa
-desligada por padrão. Nele, cole um access token obtido pela CLI (veja [Usando a API](#usando-a-api)).
-
 Sem chave de assinatura, o `auth-server` do compose gera uma a cada subida, e os tokens emitidos param de valer quando
 o container reinicia. Para manter os tokens entre reinicializações, gere uma chave em `.secrets/`, pasta que o Git e a
 imagem ignoram e que o compose monta no container:
@@ -285,16 +277,43 @@ Quando um teste falha, o relatório abre com o trace da execução:
 npm --prefix e2e/playwright run report
 ```
 
-### pgAdmin, redis-commander e Kafdrop
+### Endereços
 
-Os três sobem junto com a infraestrutura do compose, nos dois modos acima, e só aceitam conexões desta máquina:
+São os mesmos nos dois modos acima. No compose, as portas ficam presas a `127.0.0.1`: só esta máquina as alcança.
 
-| Ferramenta | Endereço | O que mostra |
+#### Aplicações
+
+Cada aplicação responde em duas portas: a pública, que o navegador e a CLI usam, e a interna, a do actuator, que é só
+para a operação.
+
+| Aplicação | Pública | Interna (actuator) |
 |---|---|---|
-| pgAdmin | http://localhost:16543 | O PostgreSQL: contas, links e cliques. Abre sem login, com o servidor `encurtador-url` já conectado |
-| redis-commander | http://localhost:8181 | O Redis: o cache de resolução (`link:v1:*`) e os contadores de rate limit (`rl:*`) |
-| Kafdrop | http://localhost:9000 | O Kafka: os tópicos `link-clicks` e `link-clicks-dlt`, suas partições e mensagens, e o atraso do consumer group `click-consumer` |
+| `api` | http://localhost:8080: API e links curtos | http://localhost:8081/actuator/health |
+| `auth-server` | http://localhost:8090: login, cadastro (`/register`) e tokens | http://localhost:8091/actuator/health |
+| `bff` | http://localhost:8070: o painel | http://localhost:8071/actuator/health |
 
+- **Pública:** é por ela que o sistema funciona. Em produção, fica atrás de um proxy reverso com HTTPS.
+- **Interna:** o actuator responde sem login, com as métricas e o health completo, que na API inclui o Redis e o
+  Kafka. Nada do sistema depende dela, mas o monitoramento depende: em produção, só a rede interna deve alcançá-la,
+  nunca a internet. Detalhes em [Operação](#operação).
+- **Swagger UI:** http://localhost:8080/swagger-ui.html, na porta pública da API. O perfil `local` e o compose ligam a
+  documentação, que a imagem deixa desligada por padrão. No perfil `local`, o botão Authorize faz login no
+  `auth-server` pelo fluxo de código com PKCE, com o cliente `encurtador-dev`. No compose, que não tem esse cliente,
+  cole um access token obtido pela CLI (veja [Usando a API](#usando-a-api)).
+
+#### Ferramentas de inspeção
+
+O pgAdmin, o redis-commander e o Kafdrop sobem junto com a infraestrutura do compose:
+
+| Ferramenta | Endereço | Serviço | Usuário e senha | O que mostra |
+|---|---|---|---|---|
+| pgAdmin | http://localhost:16543 | PostgreSQL, banco `encurtador`: `localhost:5433` desta máquina, `postgres:5432` na rede do compose | `encurtador` / `encurtador` | Contas, links e cliques. Abre sem login, com o servidor `encurtador-url` já conectado |
+| redis-commander | http://localhost:8181 | Redis: `localhost:6379` desta máquina, `redis:6379` na rede do compose | sem autenticação | O cache de resolução (`link:v1:*`) e os contadores de rate limit (`rl:*`) |
+| Kafdrop | http://localhost:9000 | Kafka: `localhost:9092` desta máquina, `kafka:29092` na rede do compose | sem autenticação | Os tópicos `link-clicks` e `link-clicks-dlt`, suas partições e mensagens, e o atraso do consumer group `click-consumer` |
+
+- Usuário e senha são os do `compose.yaml`, só para o ambiente local. Desta máquina (psql, IDE), conecte pelo
+  `localhost`. De outro container, como num servidor novo cadastrado no pgAdmin, use o nome do serviço na rede do
+  compose: o PostgreSQL fica na 5432 lá dentro, e não na 5433.
 - O servidor do pgAdmin vem de [infra/pgadmin/servers.json](infra/pgadmin/servers.json), lido só na primeira subida.
   Depois de mudar o arquivo, remova o container e o volume do pgAdmin para ele importar de novo (o nome do volume
   leva o nome da pasta do projeto):
