@@ -64,10 +64,14 @@ encurtador-url/
 │   └── coverage/       sem código: o gate de cobertura de todos os módulos
 ├── infra/
 │   └── pgadmin/        servidor pré-cadastrado do pgAdmin
-└── docs/               ADRs e roteiros de operação
+└── docs/               ADRs, roteiros de operação e o mapa dos componentes (componentes.html)
 ```
 
 Na raiz ficam também o `compose.yaml`, o `Dockerfile` e o `pom.xml` que junta todos os módulos.
+
+O [mapa dos componentes](docs/componentes.html) mostra o mesmo de forma interativa: quem fala com quem na stack do
+compose, o grafo de módulos e um inventário, com a simulação da queda de cada serviço. É uma página só, sem build: abra
+o arquivo direto no navegador.
 
 Dependências entre módulos:
 
