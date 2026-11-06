@@ -12,12 +12,12 @@ import java.util.HexFormat;
  * {@code server.tomcat.remoteip.internal-proxies} restrito aos proxies confiáveis; nunca {@code framework}, que
  * confia no {@code X-Forwarded-For} de qualquer origem.
  */
-final class ClientAddress {
+public final class ClientAddress {
 
     private ClientAddress() {
     }
 
-    static String subjectOf(String remoteAddr) {
+    public static String subjectOf(String remoteAddr) {
         try {
             InetAddress address = InetAddress.ofLiteral(remoteAddr);
             if (address instanceof Inet6Address) {

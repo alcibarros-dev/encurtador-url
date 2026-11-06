@@ -1,12 +1,12 @@
 package br.com.encurtador.redirect;
 
-import br.com.encurtador.identity.application.RegistrationService;
 import br.com.encurtador.link.application.LinkService;
 import br.com.encurtador.redirect.application.LinkCache;
 import br.com.encurtador.shared.redis.RedisGuard;
 import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.IntegrationTest;
 import br.com.encurtador.support.RedisProxy;
+import br.com.encurtador.support.TestAccounts;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,7 +51,7 @@ class RedisDegradationIntegrationTest {
     LinkService links;
 
     @Autowired
-    RegistrationService registration;
+    TestAccounts accounts;
 
     @Autowired
     StringRedisTemplate redis;
@@ -66,7 +66,7 @@ class RedisDegradationIntegrationTest {
     @BeforeEach
     void setUp() {
         api = new ApiClient(port);
-        owner = registration.register("degradacao-" + UUID.randomUUID() + "@exemplo.com", "senha-segura-1").id();
+        owner = accounts.create().id();
         code = links.create(owner, TARGET, null, null).code();
     }
 

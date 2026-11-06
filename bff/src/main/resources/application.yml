@@ -1,0 +1,83 @@
+# BFF do painel (ADR-0004). Configuração padrão (produção): endereços e segredos vêm de variáveis de ambiente.
+# Perfis: "local" (application-local.yml) e "test" (src/test/resources).
+spring:
+  application:
+    name: encurtador-bff
+  threads:
+    virtual:
+      enabled: true
+  docker:
+    compose:
+      enabled: false
+  data:
+    redis:
+      timeout: 100ms
+      connect-timeout: 200ms
+  web:
+    locale: pt_BR
+    locale-resolver: fixed
+
+server:
+  port: 8070
+  shutdown: graceful
+  servlet:
+    session:
+      # Sessão em memória, uma instância (D4); expira depois de 2 horas sem uso.
+      timeout: 2h
+      cookie:
+        # __Host-: só HTTPS, Path=/ e sem Domain. No local, WEBSESSION (application-local.yml).
+        name: __Host-WEBSESSION
+        http-only: true
+        secure: true
+        same-site: lax
+
+management:
+  server:
+    port: 8071
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  info:
+    java:
+      enabled: true
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+        add-additional-paths: true
+      group:
+        liveness:
+          include: livenessState
+          show-details: never
+        readiness:
+          include: readinessState
+          show-details: never
+
+logging:
+  structured:
+    format:
+      console: ecs
+
+bff:
+  api-url: ${BFF_API_URL:http://localhost:8080}
+  auth-public-url: ${BFF_AUTH_PUBLIC_URL:http://localhost:8090}
+  auth-internal-url: ${BFF_AUTH_INTERNAL_URL:${bff.auth-public-url}}
+  client-id: ${BFF_CLIENT_ID:encurtador-web}
+  # Sem padrão: defina BFF_CLIENT_SECRET, o mesmo AUTH_WEB_CLIENT_SECRET do auth-server.
+  client-secret: ${BFF_CLIENT_SECRET}
+  registration-url: ${BFF_REGISTRATION_URL:${bff.auth-public-url}/register}
+  password-change-url: ${BFF_PASSWORD_CHANGE_URL:${bff.auth-public-url}/account/password}
+  connect-timeout: 1s
+  read-timeout: 10s
+
+app:
+  # Endereço público do painel: a volta do cadastro, da troca de senha e do logout.
+  base-url: ${APP_BASE_URL:http://localhost:8070}
+  redis-guard:
+    failure-threshold: 5
+    open-duration: 5s
+  rate-limit:
+    # Cada início de login cria uma sessão anônima em memória (D4, R3).
+    login-start: { requests: 20, window: 1m }

@@ -1,0 +1,62 @@
+.pular {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  padding: 8px 12px;
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  z-index: 10;
+
+  &:focus {
+    top: 8px;
+  }
+}
+
+.topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--cor-superficie);
+  border-bottom: 1px solid var(--cor-borda);
+}
+
+.marca {
+  color: var(--cor-texto);
+  font-weight: 600;
+  font-size: 1.125rem;
+  text-decoration: none;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+
+  .ativo {
+    text-decoration: underline;
+    text-underline-offset: 6px;
+  }
+}
+
+.aviso-sessao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--cor-superficie);
+  border-bottom: 2px solid var(--cor-erro);
+
+  p {
+    margin: 0;
+  }
+}
+
+main:focus {
+  outline: none;
+}

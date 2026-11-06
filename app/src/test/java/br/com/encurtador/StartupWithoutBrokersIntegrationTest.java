@@ -1,9 +1,9 @@
 package br.com.encurtador;
 
-import br.com.encurtador.identity.application.RegistrationService;
 import br.com.encurtador.link.application.LinkService;
 import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.IntegrationTest;
+import br.com.encurtador.support.TestAccounts;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -14,7 +14,6 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.Duration;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -33,11 +32,11 @@ class StartupWithoutBrokersIntegrationTest {
     LinkService links;
 
     @Autowired
-    RegistrationService registration;
+    TestAccounts accounts;
 
     @Test
     void startsReadyAndRedirectsWithRedisAndKafkaDown() throws IOException {
-        long owner = registration.register("sem-brokers-" + UUID.randomUUID() + "@exemplo.com", "senha-segura-1").id();
+        long owner = accounts.create().id();
         String code = links.create(owner, "https://exemplo.com/", null, null).code();
 
         long start = System.nanoTime();

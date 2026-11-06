@@ -105,6 +105,29 @@ class RateLimitFilterTest {
         verify(limiter).tryAcquire(eq(rule), any(), eq("42"));
     }
 
+    @Test
+    void clientRulesUseTheClientIdOfBasicAuthenticationOrOfTheForm() throws Exception {
+        RateLimitRule rule = RateLimitRule.exact("token-client", "POST", "/oauth2/token", Key.CLIENT);
+        when(limiter.limit("token-client")).thenReturn(new Limit(10, Duration.ofMinutes(1)));
+        RateLimitFilter clientFilter = new RateLimitFilter(limiter, List.of(rule),
+                new ProblemResponseWriter(JsonMapper.builder().build()));
+
+        MockHttpServletRequest basic = request("POST", "/oauth2/token");
+        basic.addHeader("Authorization", "Basic " + java.util.Base64.getEncoder()
+                .encodeToString("encurtador%2Dweb:segredo".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        clientFilter.doFilter(basic, new MockHttpServletResponse(), new MockFilterChain());
+        MockHttpServletRequest form = request("POST", "/oauth2/token");
+        form.setParameter("client_id", "encurtador-cli");
+        clientFilter.doFilter(form, new MockHttpServletResponse(), new MockFilterChain());
+        MockHttpServletRequest anonymous = request("POST", "/oauth2/token");
+        anonymous.addHeader("Authorization", "Basic !!!");
+        clientFilter.doFilter(anonymous, new MockHttpServletResponse(), new MockFilterChain());
+
+        verify(limiter).tryAcquire(eq("token-client"), any(), eq("encurtador-web"));
+        verify(limiter).tryAcquire(eq("token-client"), any(), eq("encurtador-cli"));
+        verify(limiter, org.mockito.Mockito.times(2)).tryAcquire(eq("token-client"), any(), anyString());
+    }
+
     @ParameterizedTest
     @CsvSource(textBlock = """
             POST,   /api/v1/links

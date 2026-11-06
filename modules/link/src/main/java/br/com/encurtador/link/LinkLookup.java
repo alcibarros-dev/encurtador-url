@@ -2,6 +2,7 @@ package br.com.encurtador.link;
 
 import br.com.encurtador.link.domain.ShortCode;
 
+import java.util.List;
 import java.util.Optional;
 
 /** Consulta de links por código para os outros módulos (ADR-0001, D2). */
@@ -18,4 +19,10 @@ public interface LinkLookup {
      * (D9).
      */
     Optional<LinkSnapshot> findOwned(String code, long ownerId);
+
+    /**
+     * Todos os links não removidos do dono, ativos e expirados, em qualquer ordem: as estatísticas do usuário
+     * (ADR-0004, D7). Só os ativos têm teto; os expirados se acumulam.
+     */
+    List<LinkSnapshot> ownedLinks(long ownerId);
 }

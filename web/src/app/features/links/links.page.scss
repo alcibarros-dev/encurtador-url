@@ -1,0 +1,57 @@
+.cabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+
+  h1 {
+    margin: 0;
+  }
+}
+
+.lista {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.link p {
+  margin: 4px 0;
+}
+
+.titulo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.codigo {
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.status {
+  border: 1px solid var(--cor-aviso);
+  color: var(--cor-aviso);
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 0.875rem;
+
+  &.expirado {
+    border-color: var(--cor-texto-suave);
+    color: var(--cor-texto-suave);
+  }
+}
+
+.curta,
+.destino {
+  overflow-wrap: anywhere;
+}
+
+.datas {
+  font-size: 0.875rem;
+}

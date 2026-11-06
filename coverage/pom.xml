@@ -41,6 +41,10 @@
         </dependency>
         <dependency>
             <groupId>br.com.encurtador</groupId>
+            <artifactId>encurtador-url-account</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>br.com.encurtador</groupId>
             <artifactId>encurtador-url-link</artifactId>
         </dependency>
         <dependency>
@@ -54,6 +58,14 @@
         <dependency>
             <groupId>br.com.encurtador</groupId>
             <artifactId>encurtador-url-app</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>br.com.encurtador</groupId>
+            <artifactId>encurtador-url-auth-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>br.com.encurtador</groupId>
+            <artifactId>encurtador-url-bff</artifactId>
         </dependency>
     </dependencies>
 

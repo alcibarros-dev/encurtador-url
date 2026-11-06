@@ -1,9 +1,9 @@
 package br.com.encurtador.analytics;
 
-import br.com.encurtador.identity.application.RegistrationService;
 import br.com.encurtador.link.application.LinkService;
 import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.IntegrationTest;
+import br.com.encurtador.support.TestAccounts;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -14,7 +14,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -38,14 +37,14 @@ class KafkaDegradationIntegrationTest {
     LinkService links;
 
     @Autowired
-    RegistrationService registration;
+    TestAccounts accounts;
 
     @Autowired
     JdbcClient jdbc;
 
     @Test
     void redirectStaysFastWithKafkaHangingAndTheClicksArriveLater() {
-        long owner = registration.register("kafka-" + UUID.randomUUID() + "@exemplo.com", "senha-segura-1").id();
+        long owner = accounts.create().id();
         String code = links.create(owner, "https://exemplo.com/", null, null).code();
         ApiClient api = new ApiClient(port);
         assertThat(api.get("/" + code, null).status()).isEqualTo(302);

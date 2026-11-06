@@ -1,0 +1,69 @@
+<div class="pagina">
+  <div class="cabecalho">
+    <h1 tabindex="-1">Seus links</h1>
+    <button mat-flat-button type="button" (click)="create()">Criar link</button>
+  </div>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Carregando os links" />
+  }
+
+  @if (error(); as error) {
+    <div class="cartao" role="alert">
+      <p class="erro">{{ message(error) }}</p>
+      <button mat-stroked-button type="button" (click)="load(page())">Tentar de novo</button>
+    </div>
+  } @else if (links(); as result) {
+    @if (result.totalElements === 0) {
+      <div class="cartao vazio">
+        <p>Você ainda não tem links. Crie o primeiro para começar a acompanhar os cliques.</p>
+      </div>
+    } @else {
+      <ul class="lista" aria-label="Links">
+        @for (link of result.content; track link.code) {
+          <li class="cartao link">
+            <div class="titulo">
+              <a class="codigo" [routerLink]="['/links', link.code]">{{ link.code }}</a>
+              <span class="status" [class.expirado]="link.status === 'EXPIRED'">{{ link.status | linkStatus }}</span>
+            </div>
+            <p class="curta">{{ link.shortUrl }}</p>
+            <p class="destino"><span class="texto-suave">Destino:</span> {{ link.targetUrl }}</p>
+            <p class="texto-suave datas">
+              Criado em {{ link.createdAt | date: 'short' }} ·
+              {{ link.status === 'EXPIRED' ? 'expirou' : 'expira' }} em {{ link.expiresAt | date: 'short' }}
+            </p>
+            <div class="acoes">
+              <button mat-button type="button" (click)="copy(link)" [attr.aria-label]="'Copiar URL curta de ' + link.code">
+                Copiar URL curta
+              </button>
+              <a
+                mat-button
+                [href]="link.targetUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+                [attr.aria-label]="'Abrir destino de ' + link.code + ' em nova aba'"
+              >
+                Abrir destino
+              </a>
+              <a mat-button [routerLink]="['/links', link.code]" [attr.aria-label]="'Estatísticas de ' + link.code">
+                Estatísticas
+              </a>
+              <button mat-button type="button" (click)="remove(link)" [attr.aria-label]="'Remover ' + link.code">
+                Remover
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+      <mat-paginator
+        [length]="result.totalElements"
+        [pageIndex]="page()"
+        [pageSize]="pageSize"
+        [hidePageSize]="true"
+        [showFirstLastButtons]="true"
+        (page)="changePage($event)"
+        aria-label="Páginas de links"
+      />
+    }
+  }
+</div>

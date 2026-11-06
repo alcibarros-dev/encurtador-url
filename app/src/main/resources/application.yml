@@ -95,24 +95,21 @@ springdoc:
 
 app:
   base-url: http://localhost:8080
+  # Validação dos access tokens do servidor de autorização (ADR-0003, D6). O issuer é a URL pública dele, que vai no
+  # "iss"; o JWKS pode ser buscado por um endereço interno (no compose, http://auth-server:8090/oauth2/jwks).
   jwt:
-    # app.jwt.secret não tem padrão: defina APP_JWT_SECRET (Base64 de pelo menos 32 bytes aleatórios).
-    issuer: encurtador
+    issuer: http://localhost:8090
     audience: encurtador-api
-    access-token-ttl: 15m
+    jwk-set-uri: http://localhost:8090/oauth2/jwks
     clock-skew: 5s
-  refresh-token:
-    ttl: 7d
-    # Validade absoluta da sessão: renovar não a estende além disso.
-    session-ttl: 30d
-    purge-grace: 1d
-    purge-cron: "0 30 3 * * *"
   links:
     # 62^7 ≈ 3,5 × 10^12 códigos (ADR-0001, §1.5 e D3).
     code-length: 7
     default-ttl: 30d
     max-ttl: 365d
     max-active-per-user: 100
+    # Hosts que um link curto não pode ter como destino, além do próprio encurtador (ADR-0003, D9).
+    service-urls: ${app.jwt.issuer}
   cache:
     max-ttl: 10m
     tombstone-ttl: 1h
@@ -121,14 +118,11 @@ app:
     open-duration: 5s
   # Janela fixa por alvo (D11). Os limites por IP usam getRemoteAddr(): atrás de proxy, configure
   # server.forward-headers-strategy=native e server.tomcat.remoteip.internal-proxies com os proxies confiáveis.
+  # Login, cadastro e troca de senha são limitados no auth-server (ADR-0003, D9).
   rate-limit:
-    login: { requests: 10, window: 1m }
-    login-email: { requests: 5, window: 15m }
-    register: { requests: 10, window: 1h }
-    refresh: { requests: 30, window: 1m }
-    password-change: { requests: 5, window: 15m }
     link-creation: { requests: 30, window: 1m }
     redirect: { requests: 600, window: 1m }
+    user-stats: { requests: 30, window: 1m }
   analytics:
     buffer-capacity: 10000
     topic: link-clicks

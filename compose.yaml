@@ -1,7 +1,7 @@
 # Infraestrutura local (perfil "local"). Imagens fixadas por versão e portas presas a 127.0.0.1 (ADR-0001, D15).
 # O PostgreSQL usa a porta 5433 no host para não conflitar com outros bancos locais na 5432.
 #
-# O serviço "app" (a aplicação em container) só sobe com o profile do compose:
+# As aplicações em container ("auth-server", "app" e "bff") só sobem com o profile do compose:
 #   docker compose --profile app up --build
 # Sem o profile, o compose sobe só a infraestrutura, que é o que o perfil "local" do Spring Boot usa.
 services:
@@ -113,6 +113,54 @@ services:
       kafka:
         condition: service_started
 
+  # Servidor de autorização (ADR-0003, D11): login, cadastro, troca de senha e emissão dos tokens que o app valida.
+  auth-server:
+    profiles: ["app"]
+    build:
+      context: .
+      args:
+        MODULE: auth-server
+        HTTP_PORT: 8090
+        MANAGEMENT_PORT: 8091
+    image: encurtador-auth-server:local
+    # Usa a chave de .secrets/auth-signing-key.pem se ela existir (gere com o comando do README). Sem ela, a chave é
+    # gerada na subida, com kid único, e os tokens emitidos deixam de valer quando o container reinicia. A imagem em
+    # si só lê a chave de AUTH_SIGNING_KEY_FILE.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        if [ -f /run/secrets/encurtador/auth-signing-key.pem ]; then
+          export AUTH_SIGNING_KEY_FILE=file:/run/secrets/encurtador/auth-signing-key.pem
+        fi
+        exec java -jar application.jar
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/encurtador
+      SPRING_DATASOURCE_USERNAME: encurtador
+      SPRING_DATASOURCE_PASSWORD: encurtador
+      SPRING_DATA_REDIS_HOST: redis
+      # URL pública: vai no "iss" dos tokens e é o endereço que o navegador e a CLI usam.
+      AUTH_ISSUER: http://localhost:8090
+      AUTH_SIGNING_KEY_ID: compose-1
+      # Cliente encurtador-web, do BFF do painel (ADR-0004, D4). SOMENTE local: fora daqui, defina no .env.
+      AUTH_WEB_CLIENT_SECRET: ${AUTH_WEB_CLIENT_SECRET:-compose-web-secret}
+      AUTH_WEB_REDIRECT_URIS: http://localhost:8070/login/oauth2/code/encurtador
+      AUTH_WEB_POST_LOGOUT_REDIRECT_URIS: http://localhost:8070/
+      AUTH_PANEL_ORIGINS: http://localhost:8070
+      AUTH_PANEL_DEFAULT_URL: http://localhost:8070/
+    volumes:
+      # .secrets/ fica fora do Git e da imagem.
+      - ./.secrets:/run/secrets/encurtador:ro
+    ports:
+      - "127.0.0.1:8090:8090"
+      # Actuator completo: nunca publicar fora da máquina ou da rede interna.
+      - "127.0.0.1:8091:8091"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   app:
     profiles: ["app"]
     build: .
@@ -124,10 +172,10 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       APP_BASE_URL: http://localhost:8080
-      # Sem APP_JWT_SECRET (no ambiente ou no .env), o Spring gera um segredo aleatório a cada subida, e os tokens
-      # deixam de valer quando o container reinicia. Três ${random.value} somam 96 caracteres hexadecimais, que
-      # decodificados como Base64 passam dos 32 bytes exigidos. A imagem em si continua recusando subir sem o segredo.
-      APP_JWT_SECRET: ${APP_JWT_SECRET:-$${random.value}$${random.value}$${random.value}}
+      # Tokens do auth-server (ADR-0003, D6): o "iss" é a URL pública, e as chaves vêm pela rede interna. O app sobe
+      # e continua validando tokens com as chaves em cache mesmo com o auth-server fora.
+      APP_JWT_ISSUER: http://localhost:8090
+      APP_JWT_JWK_SET_URI: http://auth-server:8090/oauth2/jwks
       # Swagger UI em http://localhost:8080/swagger-ui.html. Só este compose local liga a documentação; a imagem
       # continua com ela desligada por padrão (D9), e a segurança libera as rotas quando a propriedade está ligada.
       SPRINGDOC_API_DOCS_ENABLED: "true"
@@ -144,6 +192,37 @@ services:
       # Não espera o Kafka ficar saudável: a aplicação sobe e redireciona sem ele (RNF02).
       kafka:
         condition: service_started
+
+  # Painel (ADR-0004, D12): a SPA e o BFF, em http://localhost:8070.
+  bff:
+    profiles: ["app"]
+    build:
+      context: .
+      args:
+        MODULE: bff
+        HTTP_PORT: 8070
+        MANAGEMENT_PORT: 8071
+    image: encurtador-bff:local
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      APP_BASE_URL: http://localhost:8070
+      BFF_API_URL: http://app:8080
+      # O navegador vai ao auth-server por localhost:8090, que também é o "iss" dos tokens; o BFF, pela rede interna.
+      BFF_AUTH_PUBLIC_URL: http://localhost:8090
+      BFF_AUTH_INTERNAL_URL: http://auth-server:8090
+      BFF_CLIENT_SECRET: ${AUTH_WEB_CLIENT_SECRET:-compose-web-secret}
+      # Sem HTTPS no local: os cookies não podem ter o prefixo __Host- nem Secure.
+      SERVER_SERVLET_SESSION_COOKIE_NAME: WEBSESSION
+      SERVER_SERVLET_SESSION_COOKIE_SECURE: "false"
+      BFF_COOKIES_CSRF_NAME: XSRF-TOKEN
+      BFF_COOKIES_SECURE: "false"
+    ports:
+      - "127.0.0.1:8070:8070"
+      # Actuator completo: nunca publicar fora da máquina ou da rede interna.
+      - "127.0.0.1:8071:8071"
+    depends_on:
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:

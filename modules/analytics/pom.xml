@@ -25,6 +25,10 @@
         </dependency>
         <dependency>
             <groupId>br.com.encurtador</groupId>
+            <artifactId>encurtador-url-ratelimit</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>br.com.encurtador</groupId>
             <artifactId>encurtador-url-shared</artifactId>
         </dependency>
         <dependency>

@@ -1,5 +1,10 @@
 # Só o necessário para o build: os poms, o wrapper e as pastas src/ dos módulos.
 **/target/
+**/node_modules/
+web/node/
+**/.angular/
+**/dist/
+web/coverage/
 .git/
 .github/
 .idea/
@@ -14,4 +19,8 @@ Dockerfile
 README.md
 .env
 .env.*
+.secrets/
 .mise.toml
+
+# Testes de ponta a ponta do painel: rodam fora da imagem
+web/e2e/

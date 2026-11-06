@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-11-02), após a revisão 1 (§8) · implementado (M0 a M4, 2026-11-02; notas no §8) · D1, D2, D4, D5, D7, D8 e D9 ajustadas pelo ADR-0003 |
+| Status | **Aceito** (2026-11-02), após a revisão 1 (§8) · implementado (M0 a M4, 2026-11-02; notas no §8) · D1, D2, D4, D5, D7, D8 e D9 ajustadas pelo ADR-0003 · D1, D2, D7 e D9 ajustadas pelo ADR-0004 |
 | Data | 2026-11-02 |
 | Escopo | Divisão do build em módulos Maven, separação entre plataforma e negócio, contratos de segurança |
 | Substitui | ADR-0001 D2 (estrutura física e regras de dependência). Ajusta ADR-0001 D9, D11, D14 e D15 |
@@ -49,6 +49,8 @@ Três coisas mudaram:
 ### D1 — Layout: plataforma, negócio e aplicações
 
 > **Ajustada pelo ADR-0003** (2026-11-02): o pacote `identity` sai do `app`; entram `modules/account` e `auth-server/`.
+>
+> **Ajustada pelo ADR-0004** (2026-11-04): entram `web/` (o Angular) e `bff/` na raiz.
 
 ```text
 encurtador-url/
@@ -85,6 +87,9 @@ Regras do layout:
 ### D2 — Grafo de dependências
 
 > **Ajustada pelo ADR-0003**: entram `account` (→ `security-api`, `shared`) e `auth-server` (→ `ratelimit`, `shared`).
+>
+> **Ajustada pelo ADR-0004**: entram `web` (sem dependências) e `bff` (→ `web`, `shared`, `ratelimit`); o `analytics`
+> passa a depender do `ratelimit`.
 
 | Módulo | Depende de |
 |---|---|
@@ -178,6 +183,8 @@ dele e não pode depender do `security`.
 ### D7 — Gate de cobertura no módulo `coverage`
 
 > **Ajustada pelo ADR-0003**: o `coverage` inclui o `auth-server`, também com o jar `exec`.
+>
+> **Ajustada pelo ADR-0004**: o `coverage` inclui o `bff`; o frontend tem gate próprio, no Vitest.
 
 O `jacoco:check` só mede as classes do próprio módulo, e os testes do `app` cobrem classes dos outros. O gate de
 ADR-0001 D14 (≥ 80% de linhas fora de `config`, num único `jacoco.exec`) passa a ser aplicado no `coverage`:
@@ -214,6 +221,9 @@ não pode apagar migrações já aplicadas do histórico; e o Flyway não precis
 
 > **Ajustada pelo ADR-0003** (D11): o Dockerfile constrói as duas aplicações, e as Run Configurations passam a cobrir
 > as duas, com uma composta que sobe ambas.
+>
+> **Ajustada pelo ADR-0004** (D12): o Dockerfile copia a pasta `web/` e usa cache do npm; o `bff` tem jar `exec`; o
+> `.mise.toml` fixa o Node 26.
 
 - **Pom raiz:** versões de terceiros (as de hoje), `dependencyManagement` dos módulos internos com
   `${project.version}`, configuração comum de plugins (Surefire com o agente do Mockito, JaCoCo `prepare-agent`,

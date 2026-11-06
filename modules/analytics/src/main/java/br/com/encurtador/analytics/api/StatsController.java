@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
-/** Estatísticas de um link do usuário autenticado (Bearer JWT; ADR-0001, D12). */
+/** Estatísticas do usuário autenticado: de um link e de todos eles (Bearer JWT; ADR-0001, D12; ADR-0004, D7). */
 @RestController
 @Tag(name = "Estatísticas", description = "Cliques chegam em segundos: a contagem é eventual.")
 @SecurityRequirement(name = OpenApiSecurity.BEARER)
@@ -44,5 +44,27 @@ class StatsController {
                                     example = "America/Sao_Paulo")
                             @RequestParam(required = false) String tz) {
         return LinkStatsResponse.from(stats.stats(userId, code, from, to, tz));
+    }
+
+    @GetMapping("/api/v1/stats")
+    @Operation(summary = "Estatísticas de todos os links", description = "Soma dos links não removidos do usuário, "
+            + "ativos e expirados: total histórico, total do período, série diária, os 10 links e os 10 referers "
+            + "mais frequentes no período. Mesmas regras de período e fuso das estatísticas de um link. Limite de "
+            + "30 por minuto por usuário.")
+    @ApiResponse(responseCode = "200", description = "Estatísticas", useReturnTypeSchema = true)
+    @ApiResponse(responseCode = "400", description = "`VALIDATION_FAILED`: período ou fuso inválido")
+    @ApiResponse(responseCode = "401", description = "`UNAUTHENTICATED` ou `INVALID_TOKEN`")
+    @ApiResponse(responseCode = "429", description = "`RATE_LIMITED`, com `Retry-After`")
+    UserStatsResponse userStats(@CurrentUser long userId,
+                                @Parameter(description = "Início do período, inclusive; padrão: 29 dias antes de `to`")
+                                @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                                LocalDate from,
+                                @Parameter(description = "Fim do período, inclusive; padrão: hoje no fuso `tz`")
+                                @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                                LocalDate to,
+                                @Parameter(description = "Fuso IANA das datas; padrão: America/Sao_Paulo",
+                                        example = "America/Sao_Paulo")
+                                @RequestParam(required = false) String tz) {
+        return UserStatsResponse.from(stats.userStats(userId, from, to, tz));
     }
 }

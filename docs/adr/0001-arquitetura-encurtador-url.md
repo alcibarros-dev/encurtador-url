@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-10-31), após a revisão 1 · plano de implementação concluído (F0 a F6) · D2 e D9 substituídas pelos ADRs 0002 e 0003 (aceitos em 2026-11-02; o 0002 implementado, o 0003 pendente); as decisões ajustadas por eles têm uma nota no início |
+| Status | **Aceito** (2026-10-31), após a revisão 1 · plano de implementação concluído (F0 a F6) · D2 e D9 substituídas pelos ADRs 0002 e 0003 (aceitos em 2026-11-02; o 0002 implementado, o 0003 pendente); as decisões ajustadas por eles têm uma nota no início · o ADR-0004 (frontend, aceito em 2026-11-04, implementação pendente) ajusta §4, RF02, R8, D8, D11, D12, D13 e D14 |
 | Data | 2026-10-31 (rev. 1 e aceite no mesmo dia) |
 | Escopo | Reescrita completa do projeto `Antony-Reis/encurtadorUrl` |
 | Stack | Java 25 · Spring Boot 4.1.2 · PostgreSQL 18 · Redis 8 · Kafka 4.4 |
@@ -69,7 +69,7 @@ assíncronas) e corrige os problemas por construção.
 | ID | Requisito |
 |---|---|
 | RF01 | Cadastrar usuário com e-mail e senha |
-| RF02 | Autenticar (login), renovar sessão (refresh) e encerrar sessão (logout). Ajustado pelo ADR-0003: login e logout no `auth-server`; refresh fora da v1 |
+| RF02 | Autenticar (login), renovar sessão (refresh) e encerrar sessão (logout). Ajustado pelo ADR-0003: login e logout no `auth-server`; refresh fora da v1. O ADR-0004 traz a renovação de volta para o painel, pelo refresh token do `encurtador-web` |
 | RF03 | Trocar a própria senha informando a senha atual |
 | RF04 | Criar link curto a partir de uma URL longa, com alias personalizado e expiração opcionais |
 | RF05 | Redirecionar `GET /{code}` para o destino |
@@ -499,6 +499,9 @@ com clareza. Um L1 local (Caffeine) fica como otimização futura.
 
 ### D8 — Analytics de cliques
 
+> **Ajustada pelo ADR-0004** (D7): o `analytics` ganha `GET /api/v1/stats`, com as estatísticas dos links não
+> removidos do usuário.
+
 **Opções.**
 
 | Opção | Impacto no redirect | Durabilidade | Peso operacional | Veredito |
@@ -672,6 +675,9 @@ precisam informar domínios internacionais em Punycode (limitação documentada;
 
 > **Ajustada pelo ADR-0002** (D5: regras declaradas pelos módulos, filtro registrado pelo `app` fora da cadeia de
 > segurança) **e pelo ADR-0003** (D9: limites de login, cadastro, refresh e troca de senha passam para o `auth-server`).
+>
+> **Ajustada pelo ADR-0004** (D4, D7): entram o limite `user-stats`, por usuário, e o do início do login no BFF, por
+> IP.
 
 **Opções.** Bucket4j com backend Redis · janela fixa própria em Redis · rate limit apenas no proxy/gateway.
 
@@ -707,6 +713,8 @@ janela (aceito). Bucket4j é a evolução natural se for preciso token bucket.
 
 > **Ajustada pelo ADR-0003** (D10): saem `/api/v1/auth/*` e `/api/v1/users/me/password`; os endpoints de protocolo do
 > `auth-server` usam o formato de erro do OAuth.
+>
+> **Ajustada pelo ADR-0004** (D7): entra `GET /api/v1/stats` no contrato.
 
 **Decisão.**
 - Versionamento por URL (`/api/v1`). Corpos sem `HttpStatus` embutido (o status é o do HTTP).
@@ -753,6 +761,9 @@ Formatos:
 
 > **Ajustada pelo ADR-0003** (D2): o `auth-server` segue a mesma observabilidade e nunca registra credenciais nem
 > códigos.
+>
+> **Ajustada pelo ADR-0004** (D12): o BFF segue a mesma observabilidade e nunca registra cookies, tokens nem corpos
+> de requisição.
 
 **Decisão.**
 - **Porta de gestão separada** (`management.server.port=8081`, publicada só internamente) com `health`, `info`,
@@ -778,6 +789,9 @@ Formatos:
 
 > **Ajustada pelo ADR-0002** (D6, D7: testes de integração no `app`, gate no módulo `coverage`) **e pelo ADR-0003**
 > (D12: cenários redistribuídos; 8 e 12 ficam fora da v1, sem refresh token).
+>
+> **Ajustada pelo ADR-0004** (D11): entram os testes do frontend (Vitest, com gate próprio de 80%), do BFF e de ponta
+> a ponta (Playwright); os cenários 8 e 12 continuam fora, porque o refresh token do `encurtador-web` não rotaciona.
 
 **Decisão.** Pirâmide com infraestrutura real nos testes de integração:
 
@@ -850,6 +864,9 @@ Surefire, ou `merge` de Surefire e Failsafe). `./mvnw verify` só exige Docker.
 
 ## 4. Fora do escopo (v1)
 
+> **Ajustada pelo ADR-0004** (2026-11-04): a interface web entra no escopo, como um painel Angular atrás de um BFF.
+> As páginas HTML de erro continuam fora.
+
 - Interface web e páginas HTML de erro.
 - Domínios personalizados, QR code, criação em lote, edição de destino (D5).
 - Verificação de e-mail, recuperação de senha por e-mail, login social, papéis de administrador.
@@ -871,7 +888,7 @@ Surefire, ou `merge` de Surefire e Failsafe). `./mvnw verify` só exige Docker.
 | R5 | HS256 com segredo compartilhado | Resolvido pelo ADR-0003: RS256 com JWKS |
 | R6 | Janela fixa permite rajadas 2× | Aceito; Bucket4j como evolução |
 | R7 | 409 no cadastro permite enumerar e-mails | Aceito, mitigado por rate limit |
-| R8 | Renovações concorrentes do mesmo refresh token derrubam a sessão | Aceito; clientes serializam o refresh. Deixa de existir na v1 do ADR-0003, sem refresh token |
+| R8 | Renovações concorrentes do mesmo refresh token derrubam a sessão | Aceito; clientes serializam o refresh. Deixa de existir na v1 do ADR-0003, sem refresh token, e não se aplica ao `encurtador-web` do ADR-0004, cujo refresh token não rotaciona |
 
 ## 6. Rastreabilidade: problemas do original → decisões
 

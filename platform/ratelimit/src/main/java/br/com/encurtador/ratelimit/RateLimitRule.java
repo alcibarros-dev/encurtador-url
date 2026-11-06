@@ -23,13 +23,22 @@ public record RateLimitRule(String name, Predicate<HttpServletRequest> matches, 
         /** Endereço do cliente; IPv6 agregado por /64. */
         IP,
         /** Usuário autenticado; requisição sem usuário não conta (a autorização já a recusou). */
-        USER
+        USER,
+        /**
+         * Cliente OAuth que se autentica: o {@code client_id} do {@code Authorization: Basic} ou do formulário.
+         * Requisição sem cliente identificado não conta.
+         */
+        CLIENT
     }
 
     /** Método e caminho exatos. */
     public static RateLimitRule exact(String name, String method, String path, Key key) {
-        return new RateLimitRule(name, request -> method.equals(request.getMethod()) && path.equals(pathOf(request)),
-                key);
+        return new RateLimitRule(name, matching(method, path), key);
+    }
+
+    /** As requisições com este método e este caminho exato, para compor uma regra com outras condições. */
+    public static Predicate<HttpServletRequest> matching(String method, String path) {
+        return request -> method.equals(request.getMethod()) && path.equals(pathOf(request));
     }
 
     /** Um único segmento de caminho com um dos métodos dados. */

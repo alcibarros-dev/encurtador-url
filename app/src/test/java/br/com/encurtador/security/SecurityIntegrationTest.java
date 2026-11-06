@@ -1,8 +1,14 @@
 package br.com.encurtador.security;
 
-import br.com.encurtador.identity.application.AccessTokenIssuer;
 import br.com.encurtador.support.IntegrationTest;
+import br.com.encurtador.support.MutableClock;
+import br.com.encurtador.support.TestJwks;
+import br.com.encurtador.support.TestTokens;
+import com.nimbusds.jose.jwk.RSAKey;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -13,12 +19,15 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Cadeia de segurança, probes e porta de gestão com a aplicação real (ADR-0001, D9 e D13).
+ * Cadeia de segurança, probes e porta de gestão com a aplicação real (ADR-0001, D9 e D13). Os tokens são validados
+ * pelo JWKS de teste, pelo mesmo caminho de produção (ADR-0003, D6 e D12); os casos de cache, limite de buscas e
+ * indisponibilidade do JWKS estão no teste do decodificador, no {@code platform/security}.
  */
 @IntegrationTest
 class SecurityIntegrationTest {
@@ -30,9 +39,21 @@ class SecurityIntegrationTest {
     int managementPort;
 
     @Autowired
-    AccessTokenIssuer tokenIssuer;
+    TestTokens tokens;
+
+    @Autowired
+    TestJwks jwks;
+
+    @Autowired
+    MutableClock clock;
 
     private final HttpClient http = HttpClient.newHttpClient();
+
+    @AfterEach
+    void restore() {
+        jwks.restore();
+        clock.reset();
+    }
 
     @Test
     void probesArePublicOnTheApplicationPort() throws Exception {
@@ -72,19 +93,66 @@ class SecurityIntegrationTest {
 
     @Test
     void validTokenIsAccepted() throws Exception {
-        String token = tokenIssuer.issue(1L).value();
-
-        HttpResponse<String> response = get(port, "/api/v1/qualquer", token);
+        HttpResponse<String> response = get(port, "/api/v1/qualquer", tokens.accessToken("assunto-1"));
 
         // Autenticado; a rota ainda não existe e o erro sai em ProblemDetail.
-        assertThat(response.statusCode()).isEqualTo(404);
-        assertThat(response.headers().firstValue("Content-Type")).hasValue("application/problem+json");
-        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
+        assertAuthenticated(response);
+    }
+
+    /** O auth-server não grava o typ; outros emissores usam JWT ou at+jwt (ADR-0003, D5 e D6). */
+    @ParameterizedTest
+    @ValueSource(strings = {"JWT", "at+jwt"})
+    void accessTokenTypesAreAccepted(String type) throws Exception {
+        assertAuthenticated(get(port, "/api/v1/qualquer", tokens.token("assunto-1").type(type).sign()));
+    }
+
+    @Test
+    void tokenFromAnotherIssuerOrForAnotherAudienceIsRejected() throws Exception {
+        assertInvalidToken(get(port, "/api/v1/qualquer", tokens.token("assunto-1").issuer("http://outro.test").sign()));
+        assertInvalidToken(get(port, "/api/v1/qualquer", tokens.token("assunto-1").audience("encurtador-web").sign()));
+    }
+
+    @Test
+    void expiredTokenIsRejectedByTheApplicationClock() throws Exception {
+        String token = tokens.accessToken("assunto-1");
+        clock.advance(Duration.ofMinutes(16));
+
+        assertInvalidToken(get(port, "/api/v1/qualquer", token));
+    }
+
+    /** Chave que o emissor não publica: 401, e não 503, mesmo depois de buscar o JWKS de novo. */
+    @Test
+    void tokenSignedByAnUnpublishedKeyIsRejected() throws Exception {
+        String token = tokens.token("assunto-1").signedWith(TestJwks.rsaKey("desconhecida")).sign();
+
+        assertInvalidToken(get(port, "/api/v1/qualquer", token));
+    }
+
+    /** Rotação (ADR-0003, D5): o JWKS passa a publicar a chave nova e a anterior, e o app aprende a nova sozinho. */
+    @Test
+    void rotatedKeyIsLearnedFromTheJwks() throws Exception {
+        assertAuthenticated(get(port, "/api/v1/qualquer", tokens.accessToken("assunto-1")));
+        RSAKey rotated = TestJwks.rsaKey("test-2");
+        jwks.publish(rotated, TestJwks.KEY);
+        int fetches = jwks.requests();
+
+        assertAuthenticated(get(port, "/api/v1/qualquer", tokens.token("assunto-1").signedWith(rotated).sign()));
+        assertAuthenticated(get(port, "/api/v1/qualquer", tokens.accessToken("assunto-1")));
+        assertThat(jwks.requests()).isEqualTo(fetches + 1);
+    }
+
+    /** Com o auth-server fora, os tokens assinados por chaves já conhecidas continuam valendo (ADR-0003, D6). */
+    @Test
+    void knownKeysKeepWorkingWithTheAuthorizationServerDown() throws Exception {
+        assertAuthenticated(get(port, "/api/v1/qualquer", tokens.accessToken("assunto-1")));
+        jwks.down();
+
+        assertAuthenticated(get(port, "/api/v1/qualquer", tokens.accessToken("assunto-2")));
     }
 
     @Test
     void tamperedTokenIsRejectedWith401NotWith500() throws Exception {
-        String[] parts = tokenIssuer.issue(1L).value().split("\\.");
+        String[] parts = tokens.accessToken("1").split("\\.");
         Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
         String payload = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8)
                 .replace("\"sub\":\"1\"", "\"sub\":\"2\"");
@@ -115,11 +183,24 @@ class SecurityIntegrationTest {
 
     @Test
     void authenticatedUserOnADeniedRouteGets403ProblemDetail() throws Exception {
-        HttpResponse<String> response = get(port, "/qualquer/coisa", tokenIssuer.issue(1L).value());
+        HttpResponse<String> response = get(port, "/qualquer/coisa", tokens.accessToken("assunto-1"));
 
         assertThat(response.statusCode()).isEqualTo(403);
         assertThat(response.headers().firstValue("Content-Type")).hasValue("application/problem+json");
         assertThat(response.body()).contains("\"code\":\"ACCESS_DENIED\"", "\"title\":\"Acesso negado\"");
+    }
+
+    private static void assertAuthenticated(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(404);
+        assertThat(response.headers().firstValue("Content-Type")).hasValue("application/problem+json");
+        assertThat(response.body()).contains("\"code\":\"NOT_FOUND\"");
+    }
+
+    private static void assertInvalidToken(HttpResponse<String> response) {
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(response.headers().firstValue("WWW-Authenticate")).hasValueSatisfying(
+                value -> assertThat(value).contains("error=\"invalid_token\""));
+        assertThat(response.body()).contains("\"code\":\"INVALID_TOKEN\"");
     }
 
     private HttpResponse<String> get(int targetPort, String path, String bearerToken)

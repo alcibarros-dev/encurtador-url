@@ -1,11 +1,11 @@
 package br.com.encurtador.analytics;
 
-import br.com.encurtador.identity.application.RegistrationService;
 import br.com.encurtador.link.application.LinkService;
-import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.ApiClient.Response;
+import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.IntegrationTest;
 import br.com.encurtador.support.MutableClock;
+import br.com.encurtador.support.TestAccounts;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -56,7 +56,7 @@ class ClickPipelineIntegrationTest {
     LinkService links;
 
     @Autowired
-    RegistrationService registration;
+    TestAccounts accounts;
 
     @Autowired
     KafkaTemplate<String, String> kafka;
@@ -84,11 +84,8 @@ class ClickPipelineIntegrationTest {
     /** Cenário 1. */
     @Test
     void clickOnARedirectShowsUpInTheStats() throws Exception {
-        String email = "pipeline-" + UUID.randomUUID() + "@exemplo.com";
-        assertThat(api.post("/api/v1/auth/register", Map.of("email", email, "password", "senha-segura-1")).status())
-                .isEqualTo(201);
-        String token = api.post("/api/v1/auth/login", Map.of("email", email, "password", "senha-segura-1"))
-                .text("accessToken");
+        // O usuário chega com o token do auth-server; a conta nasce no primeiro acesso (ADR-0003, D7 e D12).
+        String token = accounts.token(UUID.randomUUID().toString());
         String code = api.post("/api/v1/links", Map.of("url", "https://exemplo.com/artigo"), token).text("code");
 
         HttpResponse<Void> redirect = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/" + code))
@@ -218,7 +215,7 @@ class ClickPipelineIntegrationTest {
     }
 
     private long newLinkId() {
-        long owner = registration.register("clique-" + UUID.randomUUID() + "@exemplo.com", "senha-segura-1").id();
+        long owner = accounts.create().id();
         String code = links.create(owner, "https://exemplo.com/", null, null).code();
         return jdbc.sql("select id from links where code = :code").param("code", code).query(Long.class).single();
     }

@@ -8,6 +8,7 @@ import br.com.encurtador.link.domain.ShortCode;
 import br.com.encurtador.link.infra.LinkRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -33,6 +34,13 @@ class LinkLookupService implements LinkLookup {
             return Optional.empty();
         }
         return links.findByCodeAndOwnerIdAndStatus(code, ownerId, LinkStatus.ACTIVE).map(LinkLookupService::snapshot);
+    }
+
+    @Override
+    public List<LinkSnapshot> ownedLinks(long ownerId) {
+        return links.findByOwnerIdAndStatus(ownerId, LinkStatus.ACTIVE).stream()
+                .map(LinkLookupService::snapshot)
+                .toList();
     }
 
     private static LinkSnapshot snapshot(Link link) {

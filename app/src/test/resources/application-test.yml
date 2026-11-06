@@ -9,18 +9,21 @@ logging:
       console: ""
 
 app:
+  # O JWKS de teste (TestJwks) sobrescreve o jwk-set-uri no contexto dos testes de integração; este endereço, sem
+  # ninguém escutando, vale para as instâncias que não validam tokens, como a do teste sem brokers.
   jwt:
-    secret: j+ayBXFkZY6pQhXDjY9EwKbWMGAl4taU/uwaUWNb7Ac9ql/o3Zt8tB5CE0otK1a5
+    issuer: http://auth.test
+    jwk-set-uri: http://127.0.0.1:9/oauth2/jwks
+    jwks:
+      # Sem o limite de buscas fora de hora entre classes: com 30 s, um kid desconhecido de um teste barraria a rotação
+      # do seguinte. O limite é coberto no teste do decodificador.
+      min-refresh-interval: 10ms
   # Curto para que o disjuntor feche logo depois dos testes de degradação, sem atrasar as classes seguintes.
   redis-guard:
     open-duration: 1s
   # Todos os testes saem do mesmo IP: com os limites reais, uma classe esgotaria a cota da seguinte. O teste do rate
   # limit preenche o contador até o limite em vez de depender destes números.
   rate-limit:
-    login: { requests: 1000000 }
-    login-email: { requests: 1000000 }
-    register: { requests: 1000000 }
-    refresh: { requests: 1000000 }
-    password-change: { requests: 1000000 }
     link-creation: { requests: 1000000 }
     redirect: { requests: 1000000 }
+    user-stats: { requests: 1000000 }

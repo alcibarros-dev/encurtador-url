@@ -1,12 +1,11 @@
 package br.com.encurtador.analytics;
 
-import br.com.encurtador.identity.application.AccessTokenIssuer;
-import br.com.encurtador.identity.application.RegistrationService;
 import br.com.encurtador.link.application.LinkService;
-import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.ApiClient.Response;
+import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.IntegrationTest;
 import br.com.encurtador.support.MutableClock;
+import br.com.encurtador.support.TestAccounts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,10 +41,7 @@ class StatsIntegrationTest {
     LinkService links;
 
     @Autowired
-    RegistrationService registration;
-
-    @Autowired
-    AccessTokenIssuer tokenIssuer;
+    TestAccounts accounts;
 
     @Autowired
     JdbcClient jdbc;
@@ -62,8 +58,9 @@ class StatsIntegrationTest {
     @BeforeEach
     void setUp() {
         api = new ApiClient(port);
-        owner = newUser();
-        token = tokenIssuer.issue(owner).value();
+        TestAccounts.TestAccount account = accounts.create();
+        owner = account.id();
+        token = account.token();
         code = links.create(owner, TARGET, null, null).code();
         linkId = jdbc.sql("select id from links where code = :code").param("code", code).query(Long.class).single();
     }
@@ -156,7 +153,7 @@ class StatsIntegrationTest {
 
     @Test
     void linkOfAnotherUserOrDeletedLinkIs404() {
-        String others = tokenIssuer.issue(newUser()).value();
+        String others = accounts.create().token();
 
         assertProblem(api.get("/api/v1/links/" + code + "/stats", others), 404, "LINK_NOT_FOUND");
         links.delete(owner, code);
@@ -201,10 +198,6 @@ class StatsIntegrationTest {
                 .param("occurredAt", OffsetDateTime.ofInstant(Instant.parse(occurredAt), ZoneOffset.UTC))
                 .param("referrerHost", referrerHost)
                 .update();
-    }
-
-    private long newUser() {
-        return registration.register("stats-" + UUID.randomUUID() + "@exemplo.com", "senha-segura-1").id();
     }
 
     private static List<String> daily(Response response) {

@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -27,8 +28,12 @@ import java.util.List;
  * Converte toda exceção que chega ao MVC em {@code application/problem+json} (ADR-0001, D12).
  * Erros gerados em filtros (401, 403, 429) não passam por aqui e usam {@link ProblemDetails} diretamente. As exceções
  * do Spring Security lançadas no MVC são devolvidas a ele por um advice do módulo de segurança, que vem antes deste.
+ * <p>
+ * Uma aplicação com páginas HTML (o servidor de autorização, ADR-0003) o desliga com
+ * {@code app.errors.problem-details=false} e usa as páginas de erro do Spring Boot.
  */
 @RestControllerAdvice
+@ConditionalOnBooleanProperty(name = "app.errors.problem-details", matchIfMissing = true)
 class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);

@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Erro')}"></head>
+<body>
+<header th:replace="~{layout :: header}"></header>
+<main class="cartao" id="conteudo">
+    <h1 th:text="${status == 404} ? 'Página não encontrada' : 'Algo deu errado'">Algo deu errado</h1>
+    <p th:if="${status != 404}">Tente de novo em instantes.</p>
+    <p><a th:href="@{/}">Voltar ao início</a></p>
+</main>
+</body>
+</html>

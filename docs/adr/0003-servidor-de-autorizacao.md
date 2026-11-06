@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-11-02), após a revisão 1 (§8) · implementação pendente (A0 a A4) |
+| Status | **Aceito** (2026-11-02), após a revisão 1 (§8) · **implementado** (A0 a A4, 2026-11-06; notas de implementação em §8) · D3, D4, D5, D9, D11, R10 e §5 ajustados pelo ADR-0004 |
 | Data | 2026-11-02 |
 | Escopo | Tirar login, cadastro, senha e emissão de tokens do app; criar o `auth-server` (OAuth 2 / OpenID Connect) |
 | Substitui | ADR-0001 D9 (autenticação: emissão própria de JWT, login e refresh na API). Ajusta ADR-0001 D1, D6, D10, D11, D12, D13, D14, D15, RF02, R5 e R8, e ADR-0002 D1, D2, D4, D5, D7, D8 e D9 |
@@ -91,6 +91,9 @@ encurtador-url/
 
 ### D3 — Clientes registrados
 
+> **Ajustada pelo ADR-0004** (2026-11-04, D4): volta o cliente `encurtador-web`, confidencial, com código e PKCE e
+> refresh token sem rotação por 30 dias. A regra "sem refresh token na v1" continua valendo para os outros clientes.
+
 | Cliente | Tipo | Fluxo | Uso |
 |---|---|---|---|
 | `encurtador-cli` | público | `device_code`, com consentimento obrigatório | Terminal e curl |
@@ -109,6 +112,9 @@ encurtador-url/
   customização. É uma regressão consciente em relação ao ADR-0001 (RF02 e D9).
 
 ### D4 — Fluxos
+
+> **Ajustada pelo ADR-0004** (D4): o `encurtador-web` renova por refresh token; o logout do painel revoga o refresh
+> token e volta à página inicial do painel.
 
 **Login (código de autorização com PKCE)**
 
@@ -142,6 +148,8 @@ o `/authorize` devolve um código novo sem pedir a senha; a CLI precisa confirma
 (no máximo 15 minutos), como hoje (ADR-0001 D9).
 
 ### D5 — Tokens e chaves
+
+> **Ajustada pelo ADR-0004**: o `id_token` passa a levar o `email`.
 
 **Access token: JWT assinado com RS256**
 
@@ -257,6 +265,9 @@ Os refresh tokens atuais são descartados: na virada, todos fazem login de novo.
 
 ### D9 — Proteções no `auth-server`
 
+> **Ajustada pelo ADR-0004** (fase WA): login automático ao fim do cadastro, voltas só para endereços registrados do
+> painel, volta fixa da troca de senha e limite de `/oauth2/token` por `client_id` para clientes confidenciais.
+
 | Alvo | Chave | Limite |
 |---|---|---|
 | `POST /login` | IP / e-mail | 10 por minuto / 5 em 15 minutos |
@@ -296,6 +307,8 @@ Os refresh tokens atuais são descartados: na virada, todos fazem login de novo.
   porta 8080 e chama `/oauth2/token` na 8090, o `auth-server` libera CORS para `http://localhost:8080` nesse perfil.
 
 ### D11 — Execução local, imagem e CI
+
+> **Ajustada pelo ADR-0004** (D12): serviço `bff` no compose.
 
 - **Compose:** serviço `auth-server` no profile `app`, ao lado do `app`, nas portas `127.0.0.1:8090` e
   `127.0.0.1:8091`. O `app` recebe `APP_JWT_ISSUER` e `APP_JWT_JWK_SET_URI`; o `APP_JWT_SECRET` deixa de existir. O
@@ -375,6 +388,9 @@ Para os clientes muda só o endereço do emissor, descoberto por `/.well-known/o
 
 ## 5. Plano de implementação
 
+> **Ajustado pelo ADR-0004**: o trabalho do `auth-server` para o painel fica na fase WA daquele ADR, depois de A1 e A2;
+> o escopo destas fases não muda.
+
 Pré-requisito: ADR-0002 implementado até a M3. Cada fase termina com `./mvnw verify` verde.
 
 | Fase | Entrega | Pronto quando |
@@ -398,7 +414,7 @@ Pré-requisito: ADR-0002 implementado até a M3. Cada fase termina com `./mvnw v
 | R7 | Telas próprias sem verificação de e-mail | Fora do escopo, como no ADR-0001 |
 | R8 | Phishing com o `user_code` do fluxo de dispositivo | Consentimento, confirmação por POST com CSRF, limite de tentativas e bloqueio do host do `auth-server` nos links (D9) |
 | R9 | Validação de `redirect_uri` com `localhost` no SAS 7.1 (não confirmada na revisão) | Testar no A0 |
-| R10 | Tokens em claro em `oauth2_authorization` | Schema isolado com usuário próprio, sem refresh token, expurgo diário (D5) |
+| R10 | Tokens em claro em `oauth2_authorization` | Schema isolado com usuário próprio, sem refresh token, expurgo diário (D5). Com o ADR-0004, o `encurtador-web` tem refresh token, que só serve com o segredo do cliente e é apagado pelo expurgo |
 
 ## 7. Impacto nos ADRs anteriores
 
@@ -460,6 +476,41 @@ colidiria com os `subject` numéricos dos usuários migrados. Usuários novos pa
 minutos; faltavam `/oauth2/introspect` e `/.well-known/oauth-authorization-server` na lista de endpoints; o schema do
 SAS precisa de ajuste no PostgreSQL; os hashes `{bcrypt}` atuais continuam válidos; a RFC 9700 proíbe o ROPC; o OAuth
 2.1 ainda é rascunho.
+
+### Notas de implementação — A0 a A4 (2026-11-06)
+
+Resultado: `./mvnw clean verify` verde com 470 testes em Java (32 no `shared`, 28 no `ratelimit`, 24 no `security`, 7 no
+`account`, 160 no `link`, 20 no `analytics`, 10 no `redirect`, 94 no `app`, 49 no `auth-server` e 46 no `bff`) e 97,1%
+de linhas fora de config no gate agregado (1510 de 1555, com o `auth-server` e o `bff` incluídos); a stack inteira em
+containers conferida pelo `scripts/ponta-a-ponta.sh` (cadastro → login da CLI pelo fluxo de dispositivo → criar link →
+redirecionar → estatística); e o caminho real de migração (script de importação e V4) aplicado no banco de desenvolvimento, com o
+usuário existente mantendo o id. Respostas do spike A0 e desvios:
+
+| Tema | Resultado |
+|---|---|
+| `OAuth2TokenCustomizer` (A0) | `sub`, `email` e `aud` como em D5. O `aud` vai como `ArrayList`: o SAS guarda os claims com Jackson, e a lista de tipos permitidos recusa a lista imutável de `List.of` na renovação |
+| Fluxo de dispositivo (A0) | O cliente público precisa de um conversor e de um provider de autenticação próprios, como no guia do SAS. O SAS recusa `openid` nesse fluxo, que não emite `id_token`: o `encurtador-cli` pede só `email`. O consentimento nunca é lembrado (um serviço de consentimento que não grava nada), e o `verification_uri` é montado a partir do issuer: relativo, sairia com o endereço da requisição |
+| `redirect_uri` com `localhost` (A0, R9) | Aceito pelo SAS 7.1 |
+| Schema do SAS no PostgreSQL (A0) | `blob` → `text` e `timestamp` → `timestamptz` funcionam com o `JdbcOAuth2AuthorizationService`; índice extra em `principal_name` para a troca de senha |
+| CORS do Swagger UI (A0) | Só `POST /oauth2/token`, só de `http://localhost:8080`, só no perfil local |
+| Issuer público × JWKS interno (A0, R3) | Conferido no compose: `iss` `http://localhost:8090`, chaves por `http://auth-server:8090/oauth2/jwks` |
+| Forma do teste ponta a ponta (A0) | Script sobre o compose (`scripts/ponta-a-ponta.sh`), que o CI roda num job próprio junto com o Playwright do ADR-0004 |
+| Limites do login (D9) | A cadeia das páginas recebe um `ProviderManager` explícito com o provider dos limites. Com o gerenciador padrão, o `DaoAuthenticationProvider` do Spring Boot, que fica no gerenciador pai, atendia o login sem os limites nem a normalização do e-mail |
+| Limites de protocolo (D9) | Os endpoints do SAS respondem dentro da cadeia do Spring Security: o filtro de rate limit fica antes dela. O `platform/ratelimit` ganhou a chave `CLIENT` (`client_id` do Basic ou do formulário) para o `token-client` |
+| Erros das páginas | `app.errors.problem-details=false` desliga o handler de problem+json do `shared` no `auth-server`: as páginas mostram os erros em HTML (ADR-0002, notas) |
+| Chave sem arquivo (D5) | Gerada na subida, com o `kid` configurado mais um sufixo aleatório. Com o mesmo `kid` de antes do reinício, o app, que guarda as chaves em cache, recusaria os tokens novos por até 15 minutos sem buscar o JWKS de novo |
+| Chave no compose (D5, D11) | Em vez de um `secret` obrigatório, o compose monta `.secrets/` e usa `auth-signing-key.pem` se o arquivo existir; sem ele, a chave é gerada na subida, como o segredo JWT aleatório de antes. A imagem só lê `AUTH_SIGNING_KEY_FILE`, que é um recurso do Spring: leva o prefixo `file:` |
+| Rotação (D5) | A chave anterior entra por `APP_AUTH_PREVIOUS_SIGNING_KEY_ID` e `APP_AUTH_PREVIOUS_SIGNING_KEY_LOCATION` (o nome `AUTH_PREVIOUS_SIGNING_KEY_FILE` do D5 não existe). Coberta por teste: o JWKS publica as duas, só a atual assina |
+| Cache de chaves no app (D6) | `JWKSourceBuilder` com validade de 15 minutos (o tempo de vida de um access token: uma chave retirada some do app no mesmo prazo), renovação antecipada de 1 minuto, até duas buscas fora de hora por janela de 30 s, tolerância a queda de 24 horas e timeouts de 500 ms e 2 s, tudo em `app.jwt.jwks.*`. Quando o limite barra a busca de um `kid` desconhecido, as últimas chaves obtidas respondem: o token sai com 401, e não com 503; sem nenhuma chave obtida, 503 |
+| `typ` (D6) | O `NimbusJwtDecoder` do Spring Security 7 não confere o `typ`; um `JwtTypeValidator` aceita `JWT`, `at+jwt` ou a ausência |
+| 503 (D6, R2) | Ligado pelo `ObjectPostProcessor<BearerTokenAuthenticationFilter>`, com teste da cadeia completa sem chave nenhuma |
+| `account` (D7) | Cache LRU em memória de 10 mil entradas (o projeto não tem Caffeine). A criação são dois comandos, `INSERT … ON CONFLICT DO NOTHING` e a leitura: num comando só com CTE, a leitura não veria a conta gravada pela transação concorrente. Teste com 16 acessos paralelos do mesmo `sub` |
+| Host do auth-server nos links (D9) | `app.links.service-urls`, por padrão `${app.jwt.issuer}`: os hosts dessas URLs e seus subdomínios são recusados como destino |
+| Swagger UI (D10) | Esquema `oauth2` (código com PKCE, cliente `encurtador-dev`) acrescentado ao `bearerAuth` só quando `app.openapi.oauth2.authorization-url` existe, no perfil local |
+| Login automático do cadastro | Precisa do fator de senha (`FactorGrantedAuthority`) com o instante do login: o SAS 7 tira dele o `auth_time` do `id_token` e recusa emitir o token sem ele. Achado pelo Playwright do ADR-0004; o teste do cadastro passou a trocar o código pelo token |
+| Logout depois da troca de senha | A troca encerra as autorizações, e o `id_token_hint` deixa de ser conhecido: o `/connect/logout` cairia na página de erro, com a sessão viva. O tratador de erro do logout encerra a sessão mesmo assim e volta ao endereço fixo do painel, nunca a um da requisição. Achado pelo Playwright |
+| V5 (A4) | Entrou na mesma versão da V4. Para manter a volta atrás possível, num banco com usuários a primeira subida usa `SPRING_FLYWAY_TARGET=4`, e a V5 só roda depois da virada confirmada ([roteiro](../runbooks/migracao-auth-server.md)) |
+| Run Configurations (D11) | Maven e debug para cada aplicação e a composta `stack (local)`, que também sobe o BFF do ADR-0004 |
 
 ## Referências
 

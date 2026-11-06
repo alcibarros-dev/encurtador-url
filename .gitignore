@@ -1,6 +1,16 @@
 target/
 .mvn/wrapper/maven-wrapper.jar
 
+### Frontend (ADR-0004, D12) ###
+node_modules/
+web/node/
+.angular/
+dist/
+coverage/
+!/coverage/
+playwright-report/
+test-results/
+
 ### IDEs ###
 # Do IntelliJ, só as Run Configurations são compartilhadas.
 .idea/*
@@ -19,3 +29,5 @@ target/
 
 ### Segredos locais ###
 .env
+# Chave de assinatura do auth-server no compose (ADR-0003, D5)
+.secrets/

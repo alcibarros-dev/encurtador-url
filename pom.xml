@@ -23,10 +23,14 @@
         <module>platform/ratelimit</module>
         <module>platform/security-api</module>
         <module>platform/security</module>
+        <module>modules/account</module>
         <module>modules/link</module>
         <module>modules/analytics</module>
         <module>modules/redirect</module>
         <module>app</module>
+        <module>auth-server</module>
+        <module>web</module>
+        <module>bff</module>
         <module>coverage</module>
     </modules>
 
@@ -36,7 +40,8 @@
         <springdoc.version>3.2.0</springdoc.version>
         <jacoco.version>0.8.16</jacoco.version>
         <jacoco.minimum-line-coverage>0.80</jacoco.minimum-line-coverage>
-        <!-- Só o app tem main: os outros módulos ignoram o spring-boot:run executado na raiz -->
+        <!-- Só as aplicações (app, auth-server, bff) rodam com spring-boot:run; as bibliotecas o ignoram. Na raiz, sobe o
+             app, o primeiro do reactor; cada aplicação roda com -pl <módulo> -am (ADR-0003, D11) -->
         <spring-boot.run.skip>true</spring-boot.run.skip>
     </properties>
 
@@ -64,6 +69,11 @@
             </dependency>
             <dependency>
                 <groupId>br.com.encurtador</groupId>
+                <artifactId>encurtador-url-account</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>br.com.encurtador</groupId>
                 <artifactId>encurtador-url-link</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -80,6 +90,21 @@
             <dependency>
                 <groupId>br.com.encurtador</groupId>
                 <artifactId>encurtador-url-app</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>br.com.encurtador</groupId>
+                <artifactId>encurtador-url-auth-server</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>br.com.encurtador</groupId>
+                <artifactId>encurtador-url-web</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>br.com.encurtador</groupId>
+                <artifactId>encurtador-url-bff</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

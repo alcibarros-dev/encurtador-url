@@ -189,5 +189,10 @@ class LinkResolverTest {
         public Optional<LinkSnapshot> findOwned(String code, long ownerId) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public List<LinkSnapshot> ownedLinks(long ownerId) {
+            throw new UnsupportedOperationException();
+        }
     }
 }

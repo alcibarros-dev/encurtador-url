@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -21,4 +22,6 @@ public interface LinkRepository extends Repository<Link, Long>, LinkWrites {
     Optional<Link> findByCodeAndOwnerIdAndStatus(String code, long ownerId, LinkStatus status);
 
     Page<Link> findByOwnerIdAndStatus(long ownerId, LinkStatus status, Pageable pageable);
+
+    List<Link> findByOwnerIdAndStatus(long ownerId, LinkStatus status);
 }

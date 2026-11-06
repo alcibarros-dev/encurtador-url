@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,7 +14,7 @@ class RandomShortCodeGeneratorTest {
     private static final int SAMPLES = 10_000;
 
     private final RandomShortCodeGenerator generator = new RandomShortCodeGenerator(
-            new LinkProperties(7, Duration.ofDays(30), Duration.ofDays(365), 100));
+            new LinkProperties(7, Duration.ofDays(30), Duration.ofDays(365), 100, List.of()));
 
     @Test
     void generatesBase62CodesOfTheConfiguredLength() {

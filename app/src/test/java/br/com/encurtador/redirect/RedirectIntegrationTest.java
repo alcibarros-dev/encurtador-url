@@ -1,11 +1,11 @@
 package br.com.encurtador.redirect;
 
-import br.com.encurtador.identity.application.RegistrationService;
 import br.com.encurtador.link.application.LinkService;
-import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.ApiClient.Response;
+import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.IntegrationTest;
 import br.com.encurtador.support.MutableClock;
+import br.com.encurtador.support.TestAccounts;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +22,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,7 +41,7 @@ class RedirectIntegrationTest {
     LinkService links;
 
     @Autowired
-    RegistrationService registration;
+    TestAccounts accounts;
 
     @Autowired
     StringRedisTemplate redis;
@@ -65,7 +64,7 @@ class RedirectIntegrationTest {
     @BeforeEach
     void setUp() {
         api = new ApiClient(port);
-        owner = registration.register("redirect-" + UUID.randomUUID() + "@exemplo.com", "senha-segura-1").id();
+        owner = accounts.create().id();
     }
 
     @AfterEach

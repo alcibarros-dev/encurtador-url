@@ -1,0 +1,20 @@
+<a class="pular" href="#conteudo" (click)="skipToContent($event)">Pular para o conteúdo</a>
+<header class="topo">
+  <a class="marca" routerLink="/">Encurtador</a>
+  @if (sessions.loggedIn()) {
+    <nav aria-label="Principal">
+      <a mat-button routerLink="/links" routerLinkActive="ativo" ariaCurrentWhenActive="page">Links</a>
+      <a mat-button routerLink="/estatisticas" routerLinkActive="ativo" ariaCurrentWhenActive="page">Estatísticas</a>
+      <a mat-button routerLink="/conta" routerLinkActive="ativo" ariaCurrentWhenActive="page">Conta</a>
+    </nav>
+  }
+</header>
+@if (sessions.expired()) {
+  <div class="aviso-sessao" role="alert">
+    <p>Sua sessão expirou. Entre de novo para continuar de onde parou.</p>
+    <a mat-flat-button [href]="loginHref()">Entrar</a>
+  </div>
+}
+<main id="conteudo" tabindex="-1">
+  <router-outlet />
+</main>

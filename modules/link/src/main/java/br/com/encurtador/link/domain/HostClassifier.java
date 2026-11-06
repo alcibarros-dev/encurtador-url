@@ -1,13 +1,15 @@
 package br.com.encurtador.link.domain;
 
 import java.net.InetAddress;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
  * Classifica o host de um destino sem consultar DNS (ADR-0001, D10, regra 7). Recusa endereços que apontam para a
- * rede de quem clica e para o próprio encurtador.
+ * rede de quem clica, para o próprio encurtador e para os outros serviços dele, como o servidor de autorização: um link
+ * curto não pode levar à página de confirmação do fluxo de dispositivo (ADR-0003, D9).
  * <p>
  * É higiene, não barreira: um nome DNS pode resolver para 192.168.0.1. Também não há SSRF a evitar, porque o servidor
  * nunca acessa o destino.
@@ -31,10 +33,20 @@ public final class HostClassifier {
             new Ipv4Range(240, 0, 0, 0, 4));     // reservada, inclui o broadcast
 
     private final String shortenerHost;
+    private final List<String> serviceHosts;
 
     /** @param shortenerHost host de {@code app.base-url}; ele e seus subdomínios são recusados (evita loops) */
     public HostClassifier(String shortenerHost) {
+        this(shortenerHost, List.of());
+    }
+
+    /**
+     * @param shortenerHost host de {@code app.base-url}
+     * @param serviceHosts  hosts dos outros serviços do encurtador; eles e seus subdomínios também são recusados
+     */
+    public HostClassifier(String shortenerHost, Collection<String> serviceHosts) {
         this.shortenerHost = normalize(shortenerHost);
+        this.serviceHosts = serviceHosts.stream().map(HostClassifier::normalize).toList();
     }
 
     /** Minúsculas e sem um ponto final: {@code Exemplo.COM.} e {@code exemplo.com} são o mesmo host. */
@@ -115,9 +127,16 @@ public final class HostClassifier {
         if (host.equals("localhost") || host.endsWith(".localhost")) {
             throw new InvalidValueException("não pode apontar para localhost");
         }
-        if (host.equals(shortenerHost) || host.endsWith("." + shortenerHost)) {
+        if (sameOrSubdomain(host, shortenerHost)) {
             throw new InvalidValueException("não pode apontar para o próprio encurtador");
         }
+        if (serviceHosts.stream().anyMatch(service -> sameOrSubdomain(host, service))) {
+            throw new InvalidValueException("não pode apontar para um serviço do encurtador");
+        }
+    }
+
+    private static boolean sameOrSubdomain(String host, String base) {
+        return host.equals(base) || host.endsWith("." + base);
     }
 
     private static void rejectIfBlocked(int ipv4) {

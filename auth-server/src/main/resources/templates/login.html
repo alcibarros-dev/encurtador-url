@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Entrar')}"></head>
+<body>
+<header th:replace="~{layout :: header}"></header>
+<main class="cartao" id="conteudo">
+    <h1>Entrar</h1>
+    <p class="aviso" role="status" th:if="${param.logout}">Você saiu.</p>
+    <p class="erro" role="alert" th:if="${param.error}">E-mail ou senha incorretos.</p>
+    <p class="erro" role="alert" th:if="${param.blocked}"
+       th:text="|Muitas tentativas. Tente de novo em ${param.blocked[0]} segundos.|">Muitas tentativas.</p>
+    <p class="erro" role="alert" th:if="${param.unavailable}">Não foi possível entrar agora. Tente de novo em
+        instantes.</p>
+    <form method="post" th:action="@{/login}">
+        <label for="username">E-mail</label>
+        <input id="username" name="username" type="email" autocomplete="username" required autofocus>
+        <label for="password">Senha</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Entrar</button>
+    </form>
+    <p>Ainda não tem conta? <a th:href="@{/register}">Criar conta</a></p>
+</main>
+</body>
+</html>

@@ -1,7 +1,5 @@
 package br.com.encurtador.ratelimit;
 
-import br.com.encurtador.identity.application.AccessTokenIssuer;
-import br.com.encurtador.identity.application.RegistrationService;
 import br.com.encurtador.link.application.LinkService;
 import br.com.encurtador.ratelimit.RateLimitProperties.Limit;
 import br.com.encurtador.shared.redis.RedisGuard;
@@ -10,6 +8,8 @@ import br.com.encurtador.support.ApiClient.Response;
 import br.com.encurtador.support.IntegrationTest;
 import br.com.encurtador.support.MutableClock;
 import br.com.encurtador.support.RedisProxy;
+import br.com.encurtador.support.TestAccounts;
+import br.com.encurtador.support.TestAccounts.TestAccount;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +22,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -30,13 +29,13 @@ import static org.awaitility.Awaitility.await;
 /**
  * Limites pela cadeia HTTP real (ADR-0001, D11; cenário 16 do D14). Os testes compartilham o IP 127.0.0.1, então o
  * perfil de teste usa limites altíssimos; aqui o contador da janela é preenchido até o limite configurado, e a
- * requisição seguinte é a primeira acima dele.
+ * requisição seguinte é a primeira acima dele. Os limites de login, cadastro e troca de senha são do auth-server
+ * (ADR-0003, D9).
  */
 @IntegrationTest
 class RateLimitIntegrationTest {
 
     private static final String CLIENT_IP = "127.0.0.1";
-    private static final String PASSWORD = "senha-segura-1";
 
     @LocalServerPort
     int port;
@@ -51,10 +50,7 @@ class RateLimitIntegrationTest {
     MutableClock clock;
 
     @Autowired
-    RegistrationService registration;
-
-    @Autowired
-    AccessTokenIssuer tokenIssuer;
+    TestAccounts accounts;
 
     @Autowired
     LinkService links;
@@ -90,7 +86,7 @@ class RateLimitIntegrationTest {
     @Test
     void redirectAboveTheLimitGets429WithRetryAfterUntilTheWindowTurns() {
         startOfWindow(limit("redirect"));
-        String code = links.create(newUser(), "https://exemplo.com/", null, null).code();
+        String code = links.create(accounts.create().id(), "https://exemplo.com/", null, null).code();
         double rejected = meters.counter("shortener.ratelimit.rejected", "rule", "redirect").count();
         exhaust("redirect", limit("redirect"), CLIENT_IP);
 
@@ -103,74 +99,34 @@ class RateLimitIntegrationTest {
     }
 
     @Test
-    void loginIsLimitedPerIp() {
-        startOfWindow(limit("login"));
-        exhaust("login", limit("login"), CLIENT_IP);
-
-        assertRateLimited(login(newEmail()), limit("login"));
-    }
-
-    /** Força bruta distribuída por vários IPs contra uma conta só. */
-    @Test
-    void loginIsLimitedPerEmailEvenWithTheRightPassword() {
-        startOfWindow(limit("login-email"));
-        String email = newEmail();
-        registration.register(email, PASSWORD);
-        exhaust("login-email", limit("login-email"), email);
-
-        assertRateLimited(login(email), limit("login-email"));
-        assertThat(login(newEmailOfANewUser()).status()).isEqualTo(200);
-    }
-
-    @Test
-    void registerIsLimitedPerIp() {
-        startOfWindow(limit("register"));
-        exhaust("register", limit("register"), CLIENT_IP);
-
-        assertRateLimited(api.post("/api/v1/auth/register", Map.of("email", newEmail(), "password", PASSWORD)),
-                limit("register"));
-    }
-
-    @Test
-    void refreshIsLimitedPerIp() {
-        startOfWindow(limit("refresh"));
-        exhaust("refresh", limit("refresh"), CLIENT_IP);
-
-        assertRateLimited(api.post("/api/v1/auth/refresh", Map.of("refreshToken", "qualquer")), limit("refresh"));
-    }
-
-    @Test
-    void passwordChangeIsLimitedPerUser() {
-        startOfWindow(limit("password-change"));
-        long userId = newUser();
-        exhaust("password-change", limit("password-change"), Long.toString(userId));
-
-        Response response = api.put("/api/v1/users/me/password",
-                Map.of("currentPassword", PASSWORD, "newPassword", "nova-senha-segura"),
-                tokenIssuer.issue(userId).value());
-
-        assertRateLimited(response, limit("password-change"));
-    }
-
-    @Test
     void linkCreationIsLimitedPerUserAndOtherUsersAreUnaffected() {
         startOfWindow(limit("link-creation"));
-        long userId = newUser();
-        exhaust("link-creation", limit("link-creation"), Long.toString(userId));
+        TestAccount user = accounts.create();
+        // A chave do limite por usuário é o sub do token.
+        exhaust("link-creation", limit("link-creation"), user.subject());
 
-        Response limited = api.post("/api/v1/links", Map.of("url", "https://exemplo.com/"),
-                tokenIssuer.issue(userId).value());
-        Response other = api.post("/api/v1/links", Map.of("url", "https://exemplo.com/"),
-                tokenIssuer.issue(newUser()).value());
+        Response limited = api.post("/api/v1/links", Map.of("url", "https://exemplo.com/"), user.token());
+        Response other = api.post("/api/v1/links", Map.of("url", "https://exemplo.com/"), accounts.create().token());
 
         assertRateLimited(limited, limit("link-creation"));
         assertThat(other.status()).isEqualTo(201);
     }
 
+    /** As estatísticas do usuário varrem os cliques de todos os links dele (ADR-0004, D7). */
+    @Test
+    void userStatsAreLimitedPerUser() {
+        startOfWindow(limit("user-stats"));
+        TestAccount user = accounts.create();
+        exhaust("user-stats", limit("user-stats"), user.subject());
+
+        assertRateLimited(api.get("/api/v1/stats", user.token()), limit("user-stats"));
+        assertThat(api.get("/api/v1/stats", accounts.create().token()).status()).isEqualTo(200);
+    }
+
     /** Cenário 16, parte do Redis fora: o limitador libera, e a requisição segue normalmente. */
     @Test
     void redisDownLetsRequestsThroughAndIsCounted() {
-        String code = links.create(newUser(), "https://exemplo.com/", null, null).code();
+        String code = links.create(accounts.create().id(), "https://exemplo.com/", null, null).code();
         double failOpen = meters.counter("shortener.ratelimit.failopen", "rule", "redirect").count();
         redisProxy.cut();
         try {
@@ -210,23 +166,5 @@ class RateLimitIntegrationTest {
         assertThat(response.text("code")).isEqualTo("RATE_LIMITED");
         assertThat(response.header("Retry-After")).hasValueSatisfying(value ->
                 assertThat(Long.parseLong(value)).isBetween(1L, limit.window().toSeconds()));
-    }
-
-    private Response login(String email) {
-        return api.post("/api/v1/auth/login", Map.of("email", email, "password", PASSWORD));
-    }
-
-    private long newUser() {
-        return registration.register(newEmail(), PASSWORD).id();
-    }
-
-    private String newEmailOfANewUser() {
-        String email = newEmail();
-        registration.register(email, PASSWORD);
-        return email;
-    }
-
-    private static String newEmail() {
-        return "limite-" + UUID.randomUUID() + "@exemplo.com";
     }
 }

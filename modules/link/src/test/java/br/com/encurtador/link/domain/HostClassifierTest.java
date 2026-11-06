@@ -3,13 +3,15 @@ package br.com.encurtador.link.domain;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Tabela de hosts do D10, regra 7, com as bordas de cada faixa bloqueada. Recebe hosts já normalizados. */
 class HostClassifierTest {
 
-    private final HostClassifier hosts = new HostClassifier("Encurta.Dor.");
+    private final HostClassifier hosts = new HostClassifier("Encurta.Dor.", List.of("Login.Exemplo.NET"));
 
     @ParameterizedTest
     @ValueSource(strings = {
@@ -52,6 +54,18 @@ class HostClassifierTest {
     @ValueSource(strings = {"encurta.dor", "www.encurta.dor", "a.b.encurta.dor"})
     void rejectsTheShortenerItselfAndItsSubdomains(String host) {
         assertThatThrownBy(() -> hosts.check(host)).hasMessage("não pode apontar para o próprio encurtador");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"login.exemplo.net", "a.login.exemplo.net"})
+    void rejectsOtherServicesOfTheShortenerAndTheirSubdomains(String host) {
+        assertThatThrownBy(() -> hosts.check(host)).hasMessage("não pode apontar para um serviço do encurtador");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"exemplo.net", "outrologin.exemplo.net"})
+    void acceptsNeighboursOfTheServiceHosts(String host) {
+        assertThatCode(() -> hosts.check(host)).doesNotThrowAnyException();
     }
 
     @ParameterizedTest

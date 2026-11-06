@@ -73,7 +73,7 @@ public class LinkService {
         this.links = links;
         this.codes = codes;
         this.properties = properties;
-        this.hosts = new HostClassifier(app.baseUrl().getHost());
+        this.hosts = new HostClassifier(app.baseUrl().getHost(), properties.serviceHosts());
         this.transaction = transaction;
         this.events = events;
         this.clock = clock;

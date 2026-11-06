@@ -13,8 +13,11 @@ import java.util.List;
 import static br.com.encurtador.shared.time.SqlTimestamps.toSql;
 
 /**
- * Cliques em SQL explícito: inserção idempotente e agregações (ADR-0001, D6 e D8). Os filtros por período usam
- * {@code occurred_at >= :from and occurred_at < :to}, que aproveita o índice {@code (link_id, occurred_at)}.
+ * Cliques em SQL explícito: inserção idempotente e agregações (ADR-0001, D6 e D8). As agregações recebem os ids dos
+ * links, um só para as estatísticas de um link e todos os do usuário para as dele (ADR-0004, D7). Os filtros usam
+ * {@code link_id = any(:linkIds) and occurred_at >= :from and occurred_at < :to}, que aproveita o índice
+ * {@code (link_id, occurred_at)}. Os ids vão como {@code long[]}: um só parâmetro {@code bigint[]}, que o
+ * {@code JdbcClient} não expande em uma lista de parâmetros.
  */
 @Repository
 public class ClickEventRepository {
@@ -40,19 +43,20 @@ public class ClickEventRepository {
                 .update() == 1;
     }
 
-    public long countAll(long linkId) {
-        return jdbc.sql("select count(*) from click_events where link_id = :linkId")
-                .param("linkId", linkId)
+    /** Todos os cliques já gravados dos links. */
+    public long countAll(long[] linkIds) {
+        return jdbc.sql("select count(*) from click_events where link_id = any(:linkIds)")
+                .param("linkIds", linkIds)
                 .query(Long.class)
                 .single();
     }
 
-    public long countBetween(long linkId, Instant from, Instant to) {
+    public long countBetween(long[] linkIds, Instant from, Instant to) {
         return jdbc.sql("""
                         select count(*) from click_events
-                         where link_id = :linkId and occurred_at >= :from and occurred_at < :to
+                         where link_id = any(:linkIds) and occurred_at >= :from and occurred_at < :to
                         """)
-                .param("linkId", linkId)
+                .param("linkIds", linkIds)
                 .param("from", toSql(from))
                 .param("to", toSql(to))
                 .query(Long.class)
@@ -63,16 +67,16 @@ public class ClickEventRepository {
      * Agrupa pelo dia local no fuso pedido. O fuso precisa ser um nome IANA: o PostgreSQL lê offsets como
      * {@code +03:00} no sentido POSIX, com o sinal invertido.
      */
-    public List<DailyCount> countByDay(long linkId, Instant from, Instant to, ZoneId zone) {
+    public List<DailyCount> countByDay(long[] linkIds, Instant from, Instant to, ZoneId zone) {
         return jdbc.sql("""
                         select (occurred_at at time zone :zone)::date as day, count(*) as clicks
                           from click_events
-                         where link_id = :linkId and occurred_at >= :from and occurred_at < :to
+                         where link_id = any(:linkIds) and occurred_at >= :from and occurred_at < :to
                          group by day
                          order by day
                         """)
                 .param("zone", zone.getId())
-                .param("linkId", linkId)
+                .param("linkIds", linkIds)
                 .param("from", toSql(from))
                 .param("to", toSql(to))
                 .query((rs, row) -> new DailyCount(rs.getObject("day", LocalDate.class), rs.getLong("clicks")))
@@ -80,16 +84,16 @@ public class ClickEventRepository {
     }
 
     /** Cliques sem Referer agregados com host {@code null} ("direto"). Empates saem em ordem alfabética. */
-    public List<ReferrerCount> topReferrers(long linkId, Instant from, Instant to, int limit) {
+    public List<ReferrerCount> topReferrers(long[] linkIds, Instant from, Instant to, int limit) {
         return jdbc.sql("""
                         select referrer_host, count(*) as clicks
                           from click_events
-                         where link_id = :linkId and occurred_at >= :from and occurred_at < :to
+                         where link_id = any(:linkIds) and occurred_at >= :from and occurred_at < :to
                          group by referrer_host
                          order by clicks desc, referrer_host nulls first
                          limit :limit
                         """)
-                .param("linkId", linkId)
+                .param("linkIds", linkIds)
                 .param("from", toSql(from))
                 .param("to", toSql(to))
                 .param("limit", limit)
@@ -97,9 +101,30 @@ public class ClickEventRepository {
                 .list();
     }
 
+    /** Links com mais cliques no período; empates saem pelo id, o mais antigo primeiro. */
+    public List<LinkCount> topLinks(long[] linkIds, Instant from, Instant to, int limit) {
+        return jdbc.sql("""
+                        select link_id, count(*) as clicks
+                          from click_events
+                         where link_id = any(:linkIds) and occurred_at >= :from and occurred_at < :to
+                         group by link_id
+                         order by clicks desc, link_id
+                         limit :limit
+                        """)
+                .param("linkIds", linkIds)
+                .param("from", toSql(from))
+                .param("to", toSql(to))
+                .param("limit", limit)
+                .query((rs, row) -> new LinkCount(rs.getLong("link_id"), rs.getLong("clicks")))
+                .list();
+    }
+
     public record DailyCount(LocalDate day, long clicks) {
     }
 
     public record ReferrerCount(@Nullable String host, long clicks) {
+    }
+
+    public record LinkCount(long linkId, long clicks) {
     }
 }

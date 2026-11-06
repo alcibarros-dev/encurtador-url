@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Autorizar dispositivo')}"></head>
+<body>
+<header th:replace="~{layout :: header}"></header>
+<main class="cartao" id="conteudo">
+    <h1>Autorizar dispositivo</h1>
+    <p>Digite o código mostrado no terminal. Na próxima tela, confirme o acesso só se foi você quem pediu.</p>
+    <form method="post" th:action="@{/oauth2/device_verification}">
+        <label for="user_code">Código</label>
+        <input id="user_code" name="user_code" th:value="${userCode}" autocomplete="off" required autofocus
+               autocapitalize="characters" spellcheck="false">
+        <button type="submit">Continuar</button>
+    </form>
+</main>
+</body>
+</html>

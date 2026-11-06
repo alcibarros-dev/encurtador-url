@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Conta')}"></head>
+<body>
+<header th:replace="~{layout :: header}"></header>
+<main class="cartao" id="conteudo">
+    <h1>Conta</h1>
+    <p class="aviso" role="status" th:if="${param.success}">Dispositivo autorizado. Volte ao terminal.</p>
+    <p>Você está conectado como <strong th:text="${email}">fulano@exemplo.com</strong>.</p>
+    <ul>
+        <li><a th:href="${panelUrl}">Ir para o painel</a></li>
+        <li><a th:href="@{/account/password}">Trocar senha</a></li>
+    </ul>
+    <form method="post" th:action="@{/logout}">
+        <button type="submit" class="secundario">Sair</button>
+    </form>
+</main>
+</body>
+</html>

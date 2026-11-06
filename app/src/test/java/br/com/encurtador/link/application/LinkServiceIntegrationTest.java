@@ -1,10 +1,10 @@
 package br.com.encurtador.link.application;
 
-import br.com.encurtador.identity.application.RegistrationService;
 import br.com.encurtador.link.LinkDeleted;
 import br.com.encurtador.shared.error.ApiException;
 import br.com.encurtador.support.IntegrationTest;
 import br.com.encurtador.support.MutableClock;
+import br.com.encurtador.support.TestAccounts;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,7 +44,7 @@ class LinkServiceIntegrationTest {
     LinkProperties properties;
 
     @Autowired
-    RegistrationService registration;
+    TestAccounts accounts;
 
     @Autowired
     MutableClock clock;
@@ -129,7 +129,7 @@ class LinkServiceIntegrationTest {
     }
 
     private long newUser() {
-        return registration.register("cota-" + UUID.randomUUID() + "@exemplo.com", "senha-segura-1").id();
+        return accounts.create().id();
     }
 
     /** Executa {@code attempts} chamadas liberadas ao mesmo tempo e devolve o resultado de cada uma. */

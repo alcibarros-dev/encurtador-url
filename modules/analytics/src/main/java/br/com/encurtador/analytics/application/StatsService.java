@@ -20,9 +20,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** Estatísticas de um link do usuário (RF08; ADR-0001, D8). */
+/** Estatísticas de um link do usuário e de todos os links dele (RF08; ADR-0001, D8; ADR-0004, D7). */
 @Service
 public class StatsService {
 
@@ -31,6 +32,7 @@ public class StatsService {
     static final int MAX_DAYS = 90;
     static final int DEFAULT_DAYS = 30;
     static final int TOP_REFERRERS = 10;
+    static final int TOP_LINKS = 10;
     /** O fim do período vira o início do dia seguinte: o limite superior deixa folga para isso. */
     static final LocalDate MIN_DATE = LocalDate.of(1970, 1, 1);
     static final LocalDate MAX_DATE = LocalDate.of(9999, 12, 30);
@@ -61,6 +63,37 @@ public class StatsService {
      */
     public LinkStats stats(long ownerId, String code, @Nullable LocalDate from, @Nullable LocalDate to,
                            @Nullable String timezone) {
+        Period period = period(from, to, timezone);
+        LinkSnapshot link = links.findOwned(code, ownerId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+                LINK_NOT_FOUND, "Link não encontrado."));
+        long[] ids = {link.id()};
+        return new LinkStats(link.code(), clicks.countAll(ids), clicks.countBetween(ids, period.from(), period.to()),
+                period.start(), period.end(), period.zone(), daily(ids, period), referrers(ids, period));
+    }
+
+    /**
+     * Visão agregada de todos os links não removidos do usuário, ativos e expirados (ADR-0004, D7), com as mesmas
+     * regras de período e fuso das estatísticas de um link. Um usuário sem links recebe zeros, e não 404.
+     */
+    public UserStats userStats(long ownerId, @Nullable LocalDate from, @Nullable LocalDate to,
+                               @Nullable String timezone) {
+        Period period = period(from, to, timezone);
+        Map<Long, LinkSnapshot> owned = links.ownedLinks(ownerId).stream()
+                .collect(Collectors.toMap(LinkSnapshot::id, Function.identity()));
+        long[] ids = owned.keySet().stream().mapToLong(Long::longValue).toArray();
+        Instant now = clock.instant();
+        List<UserStats.TopLink> topLinks = clicks.topLinks(ids, period.from(), period.to(), TOP_LINKS).stream()
+                .map(count -> {
+                    LinkSnapshot link = owned.get(count.linkId());
+                    return new UserStats.TopLink(link.code(), count.clicks(),
+                            link.isExpiredAt(now) ? UserStats.LinkState.EXPIRED : UserStats.LinkState.ACTIVE);
+                })
+                .toList();
+        return new UserStats(clicks.countAll(ids), clicks.countBetween(ids, period.from(), period.to()),
+                period.start(), period.end(), period.zone(), daily(ids, period), topLinks, referrers(ids, period));
+    }
+
+    private Period period(@Nullable LocalDate from, @Nullable LocalDate to, @Nullable String timezone) {
         List<FieldViolation> violations = new ArrayList<>();
         ZoneId zone = resolveZone(timezone, violations);
         LocalDate end = to != null ? to : LocalDate.now(clock.withZone(zone));
@@ -69,22 +102,22 @@ public class StatsService {
         if (!violations.isEmpty()) {
             throw new InvalidFieldsException(violations);
         }
-        LinkSnapshot link = links.findOwned(code, ownerId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
-                LINK_NOT_FOUND, "Link não encontrado."));
+        return new Period(start, end, zone);
+    }
 
-        Instant fromInstant = start.atStartOfDay(zone).toInstant();
-        Instant toInstant = end.plusDays(1).atStartOfDay(zone).toInstant();
-        Map<LocalDate, Long> perDay = clicks.countByDay(link.id(), fromInstant, toInstant, zone).stream()
+    /** Um item por dia do período, com zero nos dias sem clique. */
+    private List<LinkStats.Day> daily(long[] ids, Period period) {
+        Map<LocalDate, Long> perDay = clicks.countByDay(ids, period.from(), period.to(), period.zone()).stream()
                 .collect(Collectors.toMap(DailyCount::day, DailyCount::clicks));
-        List<LinkStats.Day> daily = start.datesUntil(end.plusDays(1))
+        return period.start().datesUntil(period.end().plusDays(1))
                 .map(day -> new LinkStats.Day(day, perDay.getOrDefault(day, 0L)))
                 .toList();
-        List<LinkStats.Referrer> referrers = clicks.topReferrers(link.id(), fromInstant, toInstant, TOP_REFERRERS)
-                .stream()
+    }
+
+    private List<LinkStats.Referrer> referrers(long[] ids, Period period) {
+        return clicks.topReferrers(ids, period.from(), period.to(), TOP_REFERRERS).stream()
                 .map(referrer -> new LinkStats.Referrer(referrer.host(), referrer.clicks()))
                 .toList();
-        return new LinkStats(link.code(), clicks.countAll(link.id()),
-                clicks.countBetween(link.id(), fromInstant, toInstant), start, end, zone, daily, referrers);
     }
 
     /**
@@ -123,5 +156,20 @@ public class StatsService {
 
     private static boolean isInRange(LocalDate date) {
         return !date.isBefore(MIN_DATE) && !date.isAfter(MAX_DATE);
+    }
+
+    /**
+     * Dias locais de {@code start} a {@code end}, inclusive, no fuso {@code zone}; {@link #from()} e {@link #to()} são
+     * os instantes que os delimitam, com o fim aberto.
+     */
+    private record Period(LocalDate start, LocalDate end, ZoneId zone) {
+
+        Instant from() {
+            return start.atStartOfDay(zone).toInstant();
+        }
+
+        Instant to() {
+            return end.plusDays(1).atStartOfDay(zone).toInstant();
+        }
     }
 }

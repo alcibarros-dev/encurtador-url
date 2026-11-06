@@ -35,12 +35,84 @@ jobs:
           if-no-files-found: ignore
 
   image:
-    name: Imagem Docker
+    name: Imagem Docker (${{ matrix.module }})
     runs-on: ubuntu-latest
     needs: verify
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Uma imagem por aplicação, com o mesmo Dockerfile (ADR-0002, D9; ADR-0003, D11).
+        include:
+          - module: app
+            image: encurtador-url
+            http-port: 8080
+            management-port: 8081
+          - module: auth-server
+            image: encurtador-auth-server
+            http-port: 8090
+            management-port: 8091
+          - module: bff
+            image: encurtador-bff
+            http-port: 8070
+            management-port: 8071
     steps:
       - uses: actions/checkout@v7
 
       - name: docker build
-        run: docker build -t encurtador-url:ci .
+        run: >-
+          docker build
+          --build-arg MODULE=${{ matrix.module }}
+          --build-arg HTTP_PORT=${{ matrix.http-port }}
+          --build-arg MANAGEMENT_PORT=${{ matrix.management-port }}
+          -t ${{ matrix.image }}:ci .
+
+  # A stack inteira do compose (ADR-0003, D12; ADR-0004, D11): login pela CLI e o painel no Playwright, com axe.
+  e2e:
+    name: Ponta a ponta
+    runs-on: ubuntu-latest
+    needs: verify
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '26.13.0'
+          cache: npm
+          cache-dependency-path: web/e2e/package-lock.json
+
+      - name: Sobe a stack
+        run: docker compose --profile app up -d --build --wait --wait-timeout 300
+
+      - name: Login pela CLI → link → redirecionamento → estatística
+        run: scripts/ponta-a-ponta.sh
+
+      - name: Painel no Playwright
+        working-directory: web/e2e
+        env:
+          CI: 'true'
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npx playwright test
+
+      - name: Relatório do Playwright
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: web/e2e/playwright-report/
+          if-no-files-found: ignore
+
+      - name: Logs da stack
+        if: failure()
+        run: docker compose --profile app logs --no-color > compose.log
+
+      - name: Guarda os logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compose-logs
+          path: compose.log
+          if-no-files-found: ignore

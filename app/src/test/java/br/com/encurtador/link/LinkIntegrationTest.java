@@ -1,12 +1,12 @@
 package br.com.encurtador.link;
 
-import br.com.encurtador.identity.application.AccessTokenIssuer;
-import br.com.encurtador.identity.application.RegistrationService;
 import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.ApiClient.Response;
 import br.com.encurtador.support.IntegrationTest;
 import br.com.encurtador.support.MutableClock;
 import br.com.encurtador.support.ScriptedShortCodeGenerator;
+import br.com.encurtador.support.TestAccounts;
+import br.com.encurtador.support.TestAccounts.TestAccount;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,10 +48,7 @@ class LinkIntegrationTest {
     ScriptedShortCodeGenerator codes;
 
     @Autowired
-    RegistrationService registration;
-
-    @Autowired
-    AccessTokenIssuer tokenIssuer;
+    TestAccounts accounts;
 
     @Autowired
     MeterRegistry meters;
@@ -210,9 +207,26 @@ class LinkIntegrationTest {
         assertProblem(response, 401, "UNAUTHENTICATED");
     }
 
+    /** O primeiro acesso de um usuário novo do auth-server cria a conta e já pode criar links (ADR-0003, D7). */
     @Test
-    void tokenOfAnAccountThatDoesNotExistCannotCreateLinks() {
-        Response response = api.post(LINKS, Map.of("url", TARGET), tokenIssuer.issue(Long.MAX_VALUE).value());
+    void firstAccessOfANewSubjectCreatesTheAccount() {
+        String subject = UUID.randomUUID().toString();
+        String newcomer = accounts.token(subject);
+
+        Response response = api.post(LINKS, Map.of("url", TARGET), newcomer);
+
+        assertThat(response.status()).isEqualTo(201);
+        assertThat(jdbc.sql("select count(*) from accounts where subject = ?").param(subject).query(Long.class)
+                .single()).isEqualTo(1);
+    }
+
+    /** A conta removida do banco depois de mapeada (o cache ainda a conhece) não ganha links órfãos. */
+    @Test
+    void tokenOfAnAccountThatNoLongerExistsCannotCreateLinks() {
+        TestAccount removed = accounts.create();
+        jdbc.sql("delete from accounts where id = ?").param(removed.id()).update();
+
+        Response response = api.post(LINKS, Map.of("url", TARGET), removed.token());
 
         assertProblem(response, 401, "INVALID_TOKEN");
     }
@@ -319,8 +333,7 @@ class LinkIntegrationTest {
     }
 
     private String newUserToken() {
-        long userId = registration.register("links-" + UUID.randomUUID() + "@exemplo.com", "senha-segura-1").id();
-        return tokenIssuer.issue(userId).value();
+        return accounts.create().token();
     }
 
     private double counter(String name) {

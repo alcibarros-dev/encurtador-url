@@ -5,7 +5,7 @@
  * API pública: {@link br.com.encurtador.analytics.ClickRecorder} e o evento
  * {@link br.com.encurtador.analytics.LinkClicked}.
  */
-@ApplicationModule(displayName = "Analytics", allowedDependencies = {"link", "security", "shared"})
+@ApplicationModule(displayName = "Analytics", allowedDependencies = {"link", "ratelimit", "security", "shared"})
 package br.com.encurtador.analytics;
 
 import org.springframework.modulith.ApplicationModule;

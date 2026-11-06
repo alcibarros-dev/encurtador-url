@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Criar conta')}"></head>
+<body>
+<header th:replace="~{layout :: header}"></header>
+<main class="cartao" id="conteudo">
+    <h1>Criar conta</h1>
+    <p class="erro" role="alert" th:if="${retryAfter}"
+       th:text="|Muitos cadastros a partir desta rede. Tente de novo em ${retryAfter} segundos.|">Muitos cadastros.</p>
+    <form method="post" th:action="@{/register}" th:object="${form}" novalidate>
+        <input type="hidden" name="continue" th:if="${continueTo}" th:value="${continueTo}">
+        <label for="email">E-mail</label>
+        <input id="email" type="email" th:field="*{email}" autocomplete="email" required autofocus
+               th:attr="aria-invalid=${#fields.hasErrors('email')},aria-describedby=${#fields.hasErrors('email')} ? 'erro-email'">
+        <p class="erro-campo" id="erro-email" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></p>
+        <label for="password">Senha</label>
+        <input id="password" type="password" name="password" autocomplete="new-password" required
+               aria-describedby="regra-senha"
+               th:attr="aria-invalid=${#fields.hasErrors('password')}">
+        <p class="dica" id="regra-senha">De 8 a 64 caracteres. Acentos e emojis contam mais de um byte: o limite é de
+            72 bytes.</p>
+        <p class="erro-campo" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></p>
+        <button type="submit">Criar conta</button>
+    </form>
+    <p>Já tem conta? <a th:href="@{/login}">Entrar</a></p>
+</main>
+</body>
+</html>

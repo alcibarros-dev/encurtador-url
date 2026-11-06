@@ -1,0 +1,31 @@
+# Perfil dos testes: os endereços do app e do auth-server vêm dos servidores falsos (FakeServer).
+management:
+  server:
+    port: 0
+
+logging:
+  structured:
+    format:
+      console: ""
+
+server:
+  servlet:
+    session:
+      cookie:
+        name: WEBSESSION
+        secure: false
+
+bff:
+  client-secret: test-web-secret
+  # Curto, para o teste do app lento não demorar.
+  read-timeout: 500ms
+  cookies:
+    csrf-name: XSRF-TOKEN
+    secure: false
+
+app:
+  base-url: http://painel.test
+  redis-guard:
+    open-duration: 1s
+  rate-limit:
+    login-start: { requests: 1000000 }

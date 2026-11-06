@@ -10,15 +10,17 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
 import java.util.List;
 
 /**
- * Cadeia de segurança stateless com JWT (ADR-0001, D9). As rotas públicas de negócio vêm dos módulos
+ * Cadeia de segurança stateless com JWT (ADR-0001, D9; ADR-0003, D6). As rotas públicas de negócio vêm dos módulos
  * ({@link PublicRoutes}, ADR-0002, D4); aqui ficam só as de infraestrutura. Tudo que não foi liberado explicitamente
  * exige token em {@code /api/v1/**} e é negado no resto.
  */
@@ -33,6 +35,7 @@ class SecurityConfig {
             @Value("${springdoc.api-docs.enabled:false}") boolean apiDocsEnabled) throws Exception {
         var entryPoint = new ProblemDetailAuthenticationEntryPoint(problemWriter);
         var accessDeniedHandler = new ProblemDetailAccessDeniedHandler(problemWriter);
+        var failureHandler = new KeysUnavailableFailureHandler(entryPoint, problemWriter);
 
         http.csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -63,6 +66,15 @@ class SecurityConfig {
                         .jwt(Customizer.withDefaults())
                         .authenticationEntryPoint(entryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
+                        // Sem chave pública utilizável, 503 em vez do 500 padrão (ADR-0003, D6). A DSL não expõe o
+                        // AuthenticationFailureHandler do filtro do bearer token.
+                        .withObjectPostProcessor(new ObjectPostProcessor<BearerTokenAuthenticationFilter>() {
+                            @Override
+                            public <O extends BearerTokenAuthenticationFilter> O postProcess(O filter) {
+                                filter.setAuthenticationFailureHandler(failureHandler);
+                                return filter;
+                            }
+                        })
                         // O Spring Security 7 publica a metadata da RFC 9728 em /.well-known/oauth-protected-resource
                         // e a anuncia no WWW-Authenticate. O padrão declara tokens presos a certificado (mTLS), o que
                         // não vale aqui.

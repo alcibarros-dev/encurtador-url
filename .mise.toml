@@ -1,2 +1,4 @@
 [tools]
 java = "corretto-25"
+# Angular 22 aceita Node ^22.22.3, ^24.15.0 ou >=26 (ADR-0004, D12); o frontend-maven-plugin instala a mesma versão.
+node = "26.13.0"

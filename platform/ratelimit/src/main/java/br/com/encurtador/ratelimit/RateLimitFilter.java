@@ -13,14 +13,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
+import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 
 /**
- * Aplica as regras de rate limit declaradas pelos módulos (ADR-0001, D11; ADR-0002, D5). A aplicação o registra como
- * filtro servlet depois da cadeia do Spring Security: o usuário autenticado chega como {@code getUserPrincipal()}, e
- * uma requisição já recusada com 401 ou 403 não conta no limite.
+ * Aplica as regras de rate limit declaradas pelos módulos (ADR-0001, D11; ADR-0002, D5). No app, ele é registrado
+ * como filtro servlet depois da cadeia do Spring Security: o usuário autenticado chega como {@code getUserPrincipal()},
+ * e uma requisição já recusada com 401 ou 403 não conta no limite. No servidor de autorização, que responde os
+ * endpoints de protocolo dentro da própria cadeia, ele vem antes dela e limita por IP e por cliente (ADR-0003, D9).
  * <p>
  * O 429 é escrito aqui mesmo, em ProblemDetail: o {@code @RestControllerAdvice} não atua em filtros. O limite por
  * e-mail do login fica no serviço de login, que já recebe o e-mail normalizado do corpo.
@@ -67,7 +71,27 @@ public final class RateLimitFilter extends OncePerRequestFilter {
                 Principal user = request.getUserPrincipal();
                 yield user == null ? null : user.getName();
             }
+            case CLIENT -> clientIdOf(request);
         };
+    }
+
+    /** O {@code client_id} de quem se autentica por Basic ou o do formulário, como na RFC 6749 (§2.3.1). */
+    private static @Nullable String clientIdOf(HttpServletRequest request) {
+        String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
+        if (authorization != null && authorization.regionMatches(true, 0, "Basic ", 0, 6)) {
+            try {
+                String credentials = new String(Base64.getDecoder().decode(authorization.substring(6).strip()),
+                        StandardCharsets.UTF_8);
+                int colon = credentials.indexOf(':');
+                String clientId = URLDecoder.decode(colon < 0 ? credentials : credentials.substring(0, colon),
+                        StandardCharsets.UTF_8);
+                return clientId.isBlank() ? null : clientId;
+            } catch (IllegalArgumentException ex) {
+                return null;
+            }
+        }
+        String clientId = request.getParameter("client_id");
+        return clientId == null || clientId.isBlank() ? null : clientId;
     }
 
     private void reject(HttpServletRequest request, HttpServletResponse response, RateLimitExceededException ex)
