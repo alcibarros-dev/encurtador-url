@@ -693,7 +693,7 @@
         id: 'playwright', label: 'Playwright', sub: 'e2e/playwright', kind: 'teste', group: 'e2e', x: 90, y: 720,
         optional: 'e2e', badges: ['fonte'], addr: '—', image: '—',
         info: {
-          resumo: 'O painel no navegador, contra a stack do compose: cadastro, links, estatísticas, troca de senha e saída, com o axe em cada página.',
+          resumo: 'O painel no navegador, contra a stack do compose: cadastro, links, o GET /{code} do link criado, estatísticas, troca de senha e saída, com o axe em cada página.',
           campos: [
             ['Pasta', '`e2e/playwright`'],
             ['Versões', 'Playwright 1.64.1 · axe-core 4.14.0'],
@@ -929,6 +929,12 @@
         what: 'cadastro · login · senha', resil: '—',
         detail: 'As páginas do auth-server, pelo mesmo navegador do teste.',
         queda: { impacto: 'nenhum', efeito: 'O teste falha no cadastro.' },
+      },
+      {
+        from: 'playwright', to: 'api', proto: 'http', port: ':8080', intensity: 1,
+        what: 'GET /{code} → 302 · 410', resil: '—',
+        detail: 'O link curto criado no painel, pelo cliente HTTP do Playwright e sem seguir o redirecionamento: 302 para o destino, com o clique chegando às estatísticas, e 410 LINK_DELETED depois da remoção.',
+        queda: { impacto: 'nenhum', efeito: 'O teste falha no redirecionamento.' },
       },
       {
         from: 'e2e-cli', to: 'auth-server', proto: 'http', port: ':8090', intensity: 1, curve: 90,

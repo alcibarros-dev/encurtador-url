@@ -126,10 +126,23 @@ autenticada responde 503 `AUTH_UNAVAILABLE`.
 Caminho do redirecionamento:
 
 ```text
-GET /{code} → rate limit (Redis) → cache (Redis) ─ miss/erro/disjuntor aberto ─→ PostgreSQL
-                                        │
-                                        └→ 302 · Location · Cache-Control: private, no-store
-                                           └→ clique na fila em memória (não bloqueia) → thread própria → Kafka
+[ Usuário abre o link curto: GET /{code} ]
+             │
+             ▼
+[ Rate limit por IP, no Redis ] ──► acima de 600 por minuto: 429 com Retry-After
+             │                      (com o Redis fora, deixa passar)
+             ▼
+[ Cache link:v1:{code}, no Redis ] ──► miss, erro ou disjuntor aberto: busca no PostgreSQL
+             │                         (só no miss, grava no cache com SET NX: até 10 min, tombstone de 1 h)
+             ▼
+[ Resultado da resolução ]
+             │
+             ├───► 1. Ativo e no prazo, pelo relógio da API: 302 com Location e Cache-Control: private, no-store
+             │        └──► clique, só no GET, sem esperar: fila em memória ──► thread própria ──► Kafka ──► click_events
+             │
+             ├───► 2. Expirado ou removido: 410 LINK_EXPIRED ou LINK_DELETED, sem ir ao banco quando há tombstone
+             │
+             └───► 3. Inexistente: 404 LINK_NOT_FOUND, sem gravar no cache
 ```
 
 O Redis fica atrás de um disjuntor: com timeouts de 100 ms e 5 falhas seguidas, ele é ignorado por 5 s, e o
@@ -234,8 +247,8 @@ desenvolvimento no compose; para usar outro, defina `AUTH_WEB_CLIENT_SECRET` num
 sozinho e o Git ignora.
 
 Para conferir a stack inteira de ponta a ponta: pela CLI (cadastro, fluxo de dispositivo, link, redirecionamento e
-estatística) e pelo painel no Playwright (cadastro, links, estatísticas, troca de senha e saída, com o axe em cada
-página):
+estatística) e pelo painel no Playwright (cadastro, links, o `GET /{code}` do link criado com o clique chegando às
+estatísticas, o 410 depois da remoção, troca de senha e saída, com o axe em cada página):
 
 ```bash
 e2e/cli/ponta-a-ponta.sh

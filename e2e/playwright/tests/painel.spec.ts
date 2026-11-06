@@ -2,15 +2,16 @@ import { expect, test } from '@playwright/test';
 import { collectCspViolations, expectAccessible } from './accessibility';
 
 /**
- * O caminho completo do painel (ADR-0004, D11): cadastro → login → criar link → estatísticas → remover → trocar
- * senha → sair → entrar com a senha nova, com o axe em cada página, inclusive as do auth-server, e a criação de link
- * só pelo teclado. Cada execução cria uma conta nova, que só serve para o teste.
+ * O caminho completo do painel (ADR-0004, D11): cadastro → login → criar link → abrir o link curto → estatísticas →
+ * remover → trocar senha → sair → entrar com a senha nova, com o axe em cada página, inclusive as do auth-server, e a
+ * criação de link só pelo teclado. Cada execução cria uma conta nova, que só serve para o teste.
  */
-test('cadastro, links, estatísticas, troca de senha e saída', async ({ page }) => {
+test('cadastro, links, estatísticas, troca de senha e saída', async ({ page, request }) => {
   const csp = collectCspViolations(page);
   const email = `painel-${Date.now()}-${Math.floor(Math.random() * 1e6)}@exemplo.com`;
   const password = `senha-${Math.random().toString(36).slice(2, 12)}`;
   const newPassword = `nova-${Math.random().toString(36).slice(2, 12)}`;
+  const target = 'https://exemplo.com/artigo-do-painel';
 
   await test.step('página inicial', async () => {
     await page.goto('/');
@@ -33,6 +34,7 @@ test('cadastro, links, estatísticas, troca de senha e saída', async ({ page })
   });
 
   let code = '';
+  let shortUrl = '';
   await test.step('cria um link só pelo teclado', async () => {
     await page.getByRole('button', { name: 'Criar link' }).focus();
     await page.keyboard.press('Enter');
@@ -40,14 +42,26 @@ test('cadastro, links, estatísticas, troca de senha e saída', async ({ page })
     await expect(dialog).toBeVisible();
     await expect(dialog.getByLabel('Endereço de destino')).toBeFocused();
     await expectAccessible(page);
-    await page.keyboard.type('https://exemplo.com/artigo-do-painel');
+    await page.keyboard.type(target);
     await page.keyboard.press('Enter');
     await expect(dialog).toBeHidden();
     await expect(page.getByText(/Link criado:/)).toBeVisible();
     const item = page.getByRole('listitem').first();
-    await expect(item).toContainText('https://exemplo.com/artigo-do-painel');
+    await expect(item).toContainText(target);
     code = (await item.locator('.codigo').textContent())?.trim() ?? '';
     expect(code).toMatch(/^[A-Za-z0-9]{7}$/);
+    shortUrl = (await item.locator('.curta').textContent())?.trim() ?? '';
+    expect(shortUrl).toMatch(new RegExp(`^https?://[^/]+/${code}$`));
+  });
+
+  await test.step('o link curto redireciona para o destino (GET /{code})', async () => {
+    // Pelo cliente HTTP do Playwright, e não pelo navegador: o navegador seguiria o 302 até o destino, um site de
+    // verdade, e o page.route só intercepta a primeira URL de um redirecionamento. Contexto próprio, sem os cookies
+    // do painel, como um visitante qualquer.
+    const response = await request.get(shortUrl, { maxRedirects: 0 });
+    expect(response.status()).toBe(302);
+    expect(response.headers()['location']).toBe(target);
+    expect(response.headers()['cache-control']).toBe('private, no-store');
   });
 
   await test.step('estatísticas do link e do usuário', async () => {
@@ -56,6 +70,13 @@ test('cadastro, links, estatísticas, troca de senha e saída', async ({ page })
     await expect(page.getByText('Cliques no período')).toBeVisible();
     await expect(page.getByRole('heading', { name: `Link ${code}` })).toBeFocused();
     await expectAccessible(page);
+
+    // O clique do GET /{code} chega às estatísticas pelo Kafka, sem que o 302 espere: recarrega até ele aparecer.
+    const totalClicks = page.locator('.cartao', { hasText: 'Cliques desde a criação' }).locator('strong');
+    await expect(async () => {
+      await page.reload();
+      await expect(totalClicks).toHaveText('1', { timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
 
     await page.getByRole('navigation', { name: 'Principal' }).getByRole('link', { name: 'Estatísticas' }).click();
     await expect(page.getByRole('heading', { name: 'Estatísticas', exact: true })).toBeVisible();
@@ -71,6 +92,11 @@ test('cadastro, links, estatísticas, troca de senha e saída', async ({ page })
     await confirm.getByRole('button', { name: 'Remover' }).click();
     await expect(page.getByText(`Link ${code} removido.`)).toBeVisible();
     await expect(page.getByText('Você ainda não tem links')).toBeVisible();
+
+    // A remoção invalida o cache depois do commit: o link curto já responde 410 no acesso seguinte.
+    const gone = await request.get(shortUrl, { maxRedirects: 0 });
+    expect(gone.status()).toBe(410);
+    expect((await gone.json()).code).toBe('LINK_DELETED');
   });
 
   await test.step('troca a senha no auth-server e volta para a conta', async () => {
