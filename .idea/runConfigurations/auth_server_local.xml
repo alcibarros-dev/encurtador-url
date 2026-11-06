@@ -19,7 +19,7 @@
       </option>
       <option name="myRunnerParameters">
         <MavenRunnerParameters>
-          <option name="cmdOptions" value="-pl auth-server -am" />
+          <option name="cmdOptions" value="-pl apps/auth-server -am" />
           <option name="profiles">
             <set />
           </option>

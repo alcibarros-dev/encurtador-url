@@ -1,7 +1,8 @@
 # Infraestrutura local (perfil "local"). Imagens fixadas por versão e portas presas a 127.0.0.1 (ADR-0001, D15).
 # O PostgreSQL usa a porta 5433 no host para não conflitar com outros bancos locais na 5432.
 #
-# As aplicações em container ("auth-server", "app" e "bff") só sobem com o profile do compose:
+# As aplicações em container ("auth-server", "api" e "bff") só sobem com o profile "app" do compose, o das aplicações
+# (ADR-0005, D2):
 #   docker compose --profile app up --build
 # Sem o profile, o compose sobe só a infraestrutura, que é o que o perfil "local" do Spring Boot usa.
 services:
@@ -38,7 +39,7 @@ services:
     volumes:
       # Servidor pré-cadastrado. A senha vem do PasswordExecCommand: no modo desktop, o pgAdmin roda o comando ao
       # conectar e usa a saída como senha. O arquivo só é lido na primeira subida (com o volume pgadmin_data vazio).
-      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - ./infra/pgadmin/servers.json:/pgadmin4/servers.json:ro
       # Preferências e histórico de consultas.
       - pgadmin_data:/var/lib/pgadmin
 
@@ -113,13 +114,13 @@ services:
       kafka:
         condition: service_started
 
-  # Servidor de autorização (ADR-0003, D11): login, cadastro, troca de senha e emissão dos tokens que o app valida.
+  # Servidor de autorização (ADR-0003, D11): login, cadastro, troca de senha e emissão dos tokens que a API valida.
   auth-server:
     profiles: ["app"]
     build:
       context: .
       args:
-        MODULE: auth-server
+        MODULE: apps/auth-server
         HTTP_PORT: 8090
         MANAGEMENT_PORT: 8091
     image: encurtador-auth-server:local
@@ -161,10 +162,16 @@ services:
       redis:
         condition: service_healthy
 
-  app:
+  # A API (ADR-0005, D2): links, estatísticas e redirecionamento, em http://localhost:8080.
+  api:
     profiles: ["app"]
-    build: .
-    image: encurtador-url:local
+    build:
+      context: .
+      args:
+        MODULE: apps/api
+        HTTP_PORT: 8080
+        MANAGEMENT_PORT: 8081
+    image: encurtador-api:local
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/encurtador
       SPRING_DATASOURCE_USERNAME: encurtador
@@ -172,7 +179,7 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       APP_BASE_URL: http://localhost:8080
-      # Tokens do auth-server (ADR-0003, D6): o "iss" é a URL pública, e as chaves vêm pela rede interna. O app sobe
+      # Tokens do auth-server (ADR-0003, D6): o "iss" é a URL pública, e as chaves vêm pela rede interna. A API sobe
       # e continua validando tokens com as chaves em cache mesmo com o auth-server fora.
       APP_JWT_ISSUER: http://localhost:8090
       APP_JWT_JWK_SET_URI: http://auth-server:8090/oauth2/jwks
@@ -199,14 +206,14 @@ services:
     build:
       context: .
       args:
-        MODULE: bff
+        MODULE: apps/bff
         HTTP_PORT: 8070
         MANAGEMENT_PORT: 8071
     image: encurtador-bff:local
     environment:
       SPRING_DATA_REDIS_HOST: redis
       APP_BASE_URL: http://localhost:8070
-      BFF_API_URL: http://app:8080
+      BFF_API_URL: http://api:8080
       # O navegador vai ao auth-server por localhost:8090, que também é o "iss" dos tokens; o BFF, pela rede interna.
       BFF_AUTH_PUBLIC_URL: http://localhost:8090
       BFF_AUTH_INTERNAL_URL: http://auth-server:8090

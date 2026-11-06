@@ -31,28 +31,33 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
-          path: coverage/target/site/jacoco-aggregate/
-          if-no-files-found: ignore
+          path: tools/coverage/target/site/jacoco-aggregate/
+          # Todo verify gera o relatório: sem ele, o caminho está errado, e o job falha (ADR-0005, D8).
+          if-no-files-found: error
 
   image:
-    name: Imagem Docker (${{ matrix.module }})
+    name: Imagem Docker (${{ matrix.name }})
     runs-on: ubuntu-latest
     needs: verify
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        # Uma imagem por aplicação, com o mesmo Dockerfile (ADR-0002, D9; ADR-0003, D11).
+        # Uma imagem por aplicação, com o mesmo Dockerfile (ADR-0002, D9; ADR-0003, D11). O module é o caminho do
+        # módulo; o name, só o nome do check (ADR-0005, D8).
         include:
-          - module: app
-            image: encurtador-url
+          - name: api
+            module: apps/api
+            image: encurtador-api
             http-port: 8080
             management-port: 8081
-          - module: auth-server
+          - name: auth-server
+            module: apps/auth-server
             image: encurtador-auth-server
             http-port: 8090
             management-port: 8091
-          - module: bff
+          - name: bff
+            module: apps/bff
             image: encurtador-bff
             http-port: 8070
             management-port: 8071
@@ -80,16 +85,16 @@ jobs:
         with:
           node-version: '26.13.0'
           cache: npm
-          cache-dependency-path: web/e2e/package-lock.json
+          cache-dependency-path: e2e/playwright/package-lock.json
 
       - name: Sobe a stack
         run: docker compose --profile app up -d --build --wait --wait-timeout 300
 
       - name: Login pela CLI → link → redirecionamento → estatística
-        run: scripts/ponta-a-ponta.sh
+        run: e2e/cli/ponta-a-ponta.sh
 
       - name: Painel no Playwright
-        working-directory: web/e2e
+        working-directory: e2e/playwright
         env:
           CI: 'true'
         run: |
@@ -102,7 +107,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
-          path: web/e2e/playwright-report/
+          path: e2e/playwright/playwright-report/
           if-no-files-found: ignore
 
       - name: Logs da stack

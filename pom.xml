@@ -10,7 +10,7 @@
         <relativePath/>
     </parent>
 
-    <!-- Agregador e pai de todos os módulos (ADR-0002, D1 e D9) -->
+    <!-- Agregador e pai de todos os módulos (ADR-0002, D1 e D9), nas pastas por papel do ADR-0005 -->
     <groupId>br.com.encurtador</groupId>
     <artifactId>encurtador-url</artifactId>
     <version>0.1.0-SNAPSHOT</version>
@@ -27,11 +27,12 @@
         <module>modules/link</module>
         <module>modules/analytics</module>
         <module>modules/redirect</module>
-        <module>app</module>
-        <module>auth-server</module>
-        <module>web</module>
-        <module>bff</module>
-        <module>coverage</module>
+        <!-- A API antes das outras aplicações: o spring-boot:run sem -pl sobe a primeira do reactor (ADR-0005, D7) -->
+        <module>apps/api</module>
+        <module>apps/auth-server</module>
+        <module>frontend/web</module>
+        <module>apps/bff</module>
+        <module>tools/coverage</module>
     </modules>
 
     <properties>
@@ -40,8 +41,9 @@
         <springdoc.version>3.2.0</springdoc.version>
         <jacoco.version>0.8.16</jacoco.version>
         <jacoco.minimum-line-coverage>0.80</jacoco.minimum-line-coverage>
-        <!-- Só as aplicações (app, auth-server, bff) rodam com spring-boot:run; as bibliotecas o ignoram. Na raiz, sobe o
-             app, o primeiro do reactor; cada aplicação roda com -pl <módulo> -am (ADR-0003, D11) -->
+        <!-- Só as aplicações (apps/api, apps/auth-server, apps/bff) rodam com spring-boot:run; as bibliotecas o
+             ignoram. Na raiz, sobe a API, a primeira do reactor; cada aplicação roda com -pl apps/<aplicação> -am
+             (ADR-0003, D11; ADR-0005, D7) -->
         <spring-boot.run.skip>true</spring-boot.run.skip>
     </properties>
 
@@ -89,7 +91,7 @@
             </dependency>
             <dependency>
                 <groupId>br.com.encurtador</groupId>
-                <artifactId>encurtador-url-app</artifactId>
+                <artifactId>encurtador-url-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -132,6 +134,15 @@
     <build>
         <pluginManagement>
             <plugins>
+                <!-- O spring-boot:run roda na raiz do projeto, onde está o compose.yaml usado pelo perfil "local". A raiz
+                     vem do mvnw e da IDE, e não da profundidade da pasta de cada aplicação (ADR-0005, D7) -->
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <configuration>
+                        <workingDirectory>${maven.multiModuleProjectDirectory}</workingDirectory>
+                    </configuration>
+                </plugin>
                 <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>

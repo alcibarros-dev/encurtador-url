@@ -1,0 +1,30 @@
+# Perfil de desenvolvimento: sobe o compose.yaml (o Redis do rate limit) e usa os endereços locais.
+# Uso: ./mvnw -pl apps/bff -am spring-boot:run
+spring:
+  docker:
+    compose:
+      enabled: true
+      lifecycle-management: start-only
+      # Só o Redis: o BFF não usa banco nem Kafka.
+      services:
+        - redis
+
+server:
+  servlet:
+    session:
+      cookie:
+        # Os cookies de localhost não aceitam o prefixo __Host- sem HTTPS nem se separam por porta (D4).
+        name: WEBSESSION
+        secure: false
+
+logging:
+  structured:
+    format:
+      console: ""
+
+bff:
+  # SOMENTE para desenvolvimento local: o mesmo segredo do perfil local do auth-server.
+  client-secret: dev-web-secret
+  cookies:
+    csrf-name: XSRF-TOKEN
+    secure: false

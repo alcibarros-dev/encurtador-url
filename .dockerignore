@@ -1,10 +1,11 @@
 # Só o necessário para o build: os poms, o wrapper e as pastas src/ dos módulos.
 **/target/
 **/node_modules/
-web/node/
+frontend/web/node/
 **/.angular/
 **/dist/
-web/coverage/
+# O caminho exato: um **/coverage/ tiraria o pom do tools/coverage do contexto e quebraria o reactor (ADR-0005, D5).
+frontend/web/coverage/
 .git/
 .github/
 .idea/
@@ -12,7 +13,7 @@ web/coverage/
 .settings/
 *.iml
 docs/
-docker/
+infra/
 compose.yaml
 Dockerfile
 .dockerignore
@@ -22,5 +23,5 @@ README.md
 .secrets/
 .mise.toml
 
-# Testes de ponta a ponta do painel: rodam fora da imagem
-web/e2e/
+# Testes de ponta a ponta da stack (CLI e Playwright): rodam fora da imagem
+e2e/

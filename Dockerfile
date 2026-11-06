@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
-# Imagem de uma aplicação do repositório (ADR-0001, D15; ADR-0002, D9): build com o Maven Wrapper, runtime só com a
-# JRE e usuário sem privilégios.
-# Uso: docker build -t encurtador-url .                      (MODULE=app, o padrão)
-#      docker build --build-arg MODULE=<módulo> -t <imagem> .    (auth-server, bff)
+# Imagem de uma aplicação do repositório (ADR-0001, D15; ADR-0002, D9; ADR-0005, D7): build com o Maven Wrapper,
+# runtime só com a JRE e usuário sem privilégios. MODULE é o caminho do módulo da aplicação.
+# Uso: docker build -t encurtador-api .                                 (MODULE=apps/api, o padrão)
+#      docker build --build-arg MODULE=<caminho do módulo> -t <imagem> .   (apps/auth-server, apps/bff)
 
 FROM eclipse-temurin:25.0.5_8-jdk-noble AS build
-ARG MODULE=app
+ARG MODULE=apps/api
 WORKDIR /build
 
 # O Node que o frontend-maven-plugin instala para o painel depende da libatomic.
@@ -14,17 +14,17 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Dependências numa camada própria: mudar só o código não baixa tudo de novo. Os poms de todos os módulos entram
-# antes das fontes, nas mesmas pastas.
+# antes das fontes, nas mesmas pastas; todo módulo fica a dois níveis da raiz (apps/api, platform/shared...).
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
-COPY --parents */pom.xml */*/pom.xml ./
+COPY --parents */*/pom.xml ./
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q dependency:go-offline
 
 # Os testes precisam de Docker (Testcontainers) e rodam no CI com ./mvnw verify, não dentro do build da imagem.
-# O painel (web) vai inteiro: package.json, lock, angular.json, tsconfig, ESLint e public/, além do src/ (ADR-0004,
-# D12). O Node fica no repositório do Maven e os pacotes no cache do npm, os dois em cache entre builds.
-COPY --parents */src */*/src ./
-COPY web/ web/
+# O painel (frontend/web) vai inteiro: package.json, lock, angular.json, tsconfig, ESLint e public/, além do src/
+# (ADR-0004, D12). O Node fica no repositório do Maven e os pacotes no cache do npm, os dois em cache entre builds.
+COPY --parents */*/src ./
+COPY frontend/web/ frontend/web/
 RUN --mount=type=cache,target=/root/.m2 --mount=type=cache,target=/root/.npm \
     ./mvnw -B -q package -DskipTests -pl ${MODULE} -am \
     && cp ${MODULE}/target/*-exec.jar application.jar \
@@ -50,8 +50,8 @@ COPY --from=build /build/extracted/snapshot-dependencies/ ./
 COPY --from=build /build/extracted/application/ ./
 
 USER app:app
-# No app, 8080: API e redirecionamento; 8081: actuator completo, só para a rede interna (D13). No auth-server, 8090 e
-# 8091; no BFF, 8070 e 8071.
+# Na API, 8080: rotas da API e redirecionamento; 8081: actuator completo, só para a rede interna (D13). No
+# auth-server, 8090 e 8091; no BFF, 8070 e 8071.
 EXPOSE ${HTTP_PORT} ${MANAGEMENT_PORT}
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError" \
     HEALTHCHECK_PORT=${HTTP_PORT}

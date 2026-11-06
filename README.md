@@ -7,14 +7,15 @@ Kafka, feita a partir de ADRs revisados antes da primeira linha de código:
 - [ADR-0002](docs/adr/0002-modulos-maven.md): divisão em módulos Maven (implementado);
 - [ADR-0003](docs/adr/0003-servidor-de-autorizacao.md): servidor de autorização com o Spring Authorization Server
   (implementado);
-- [ADR-0004](docs/adr/0004-frontend-angular.md): painel web em Angular, atrás de um BFF (implementado).
+- [ADR-0004](docs/adr/0004-frontend-angular.md): painel web em Angular, atrás de um BFF (implementado);
+- [ADR-0005](docs/adr/0005-organizacao-do-repositorio.md): organização do repositório por papel (implementado).
 
 **O que ele faz**
 
 - Painel web (Angular, atrás de um BFF): cadastro, login, logout e troca de senha pelas páginas do `auth-server`,
   gestão dos links e estatísticas do usuário. Nenhum token chega ao navegador: ele só tem o cookie de sessão do BFF.
 - Contas num servidor de autorização próprio (`auth-server`, OAuth 2.1 e OpenID Connect): cadastro, login, logout e
-  troca de senha em páginas dele, e login da CLI pelo fluxo de dispositivo. O app nunca vê senha: valida os access
+  troca de senha em páginas dele, e login da CLI pelo fluxo de dispositivo. A API nunca vê senha: valida os access
   tokens pelas chaves públicas do emissor e continua validando com ele fora do ar.
 - Links com código aleatório de 7 caracteres ou alias próprio, validade de 1 minuto a 365 dias e cota de 100 links
   ativos por usuário. O destino é validado como entrada hostil: só `http`/`https`, sem credenciais, sem IP privado
@@ -34,29 +35,39 @@ Chart.js · Vitest · Playwright com axe-core.
 ## Arquitetura
 
 Monólito modular dividido em módulos Maven ([ADR-0002](docs/adr/0002-modulos-maven.md)): plataforma técnica de um
-lado, negócio do outro, e uma aplicação que junta tudo. Ao lado dele, o servidor de autorização, uma aplicação
-separada no mesmo repositório ([ADR-0003](docs/adr/0003-servidor-de-autorizacao.md)).
+lado, negócio do outro, e uma aplicação que junta tudo, a API. Ao lado dela, o servidor de autorização, uma aplicação
+separada no mesmo repositório ([ADR-0003](docs/adr/0003-servidor-de-autorizacao.md)). Cada pasta da raiz tem um papel
+([ADR-0005](docs/adr/0005-organizacao-do-repositorio.md)):
 
 ```text
 encurtador-url/
-├── platform/
+├── apps/               o que roda como processo e vira imagem
+│   ├── api/            API e redirecionamento (8080): classe principal, configuração, migrações, testes de integração
+│   ├── auth-server/    servidor de autorização (8090): login, cadastro, troca de senha, tokens RS256, JWKS
+│   └── bff/            BFF do painel (8070): entrega a SPA, login OIDC, sessão e repasse de /api/** à API
+├── frontend/
+│   └── web/            painel em Angular, empacotado no jar do bff (META-INF/resources)
+├── modules/            negócio
+│   ├── account/        contas da API: o sub do token vira o id local, com criação no primeiro acesso
+│   ├── link/           criação, listagem e remoção de links; validação do destino
+│   ├── analytics/      fila em memória → Kafka → consumidor idempotente → estatísticas
+│   └── redirect/       GET /{code}: cache-aside no Redis, tombstones, invalidação após o commit
+├── platform/           técnico
 │   ├── shared/         erros RFC 9457, tempo, UUIDv7, disjuntor do Redis
 │   ├── ratelimit/      janela fixa no Redis (Lua) e o filtro que aplica as regras de cada módulo
 │   ├── security-api/   contratos de segurança, sem framework: @CurrentUser, UserIdResolver, PublicRoutes
 │   └── security/       validação do token pelo JWKS, cadeia de filtros, respostas 401, 403 e 503
-├── modules/
-│   ├── account/        contas do app: o sub do token vira o id local, com criação no primeiro acesso
-│   ├── link/           criação, listagem e remoção de links; validação do destino
-│   ├── analytics/      fila em memória → Kafka → consumidor idempotente → estatísticas
-│   └── redirect/       GET /{code}: cache-aside no Redis, tombstones, invalidação após o commit
-├── app/                classe principal, configuração, migrações e testes de integração
-├── auth-server/        servidor de autorização: login, cadastro, troca de senha, tokens RS256, JWKS
-├── web/                painel em Angular, empacotado como jar (META-INF/resources); e2e/ com o Playwright
-├── bff/                BFF do painel: entrega a SPA, login OIDC, sessão e repasse de /api/** ao app
-├── coverage/           sem código: o gate de cobertura de todos os módulos
-├── scripts/            teste ponta a ponta da CLI sobre o compose
+├── e2e/                testes da stack inteira, sobre o compose
+│   ├── cli/            ponta-a-ponta.sh: cadastro, login da CLI, link, redirecionamento e estatística
+│   └── playwright/     o painel no navegador, com o axe
+├── tools/
+│   └── coverage/       sem código: o gate de cobertura de todos os módulos
+├── infra/
+│   └── pgadmin/        servidor pré-cadastrado do pgAdmin
 └── docs/               ADRs e roteiros de operação
 ```
+
+Na raiz ficam também o `compose.yaml`, o `Dockerfile` e o `pom.xml` que junta todos os módulos.
 
 Dependências entre módulos:
 
@@ -69,7 +80,7 @@ Dependências entre módulos:
 | `link` | `security-api`, `ratelimit`, `shared` |
 | `analytics` | `link`, `security-api`, `ratelimit`, `shared` |
 | `redirect` | `link`, `analytics`, `security-api`, `ratelimit`, `shared` |
-| `app` | todos os de plataforma e de negócio |
+| `api` | todos os de plataforma e de negócio |
 | `auth-server` | `shared`, `ratelimit` |
 | `web` | — (só pacotes do npm) |
 | `bff` | `web`, `shared`, `ratelimit` |
@@ -79,23 +90,23 @@ O Maven barra na compilação um import de módulo não declarado. O Spring Modu
 que o Maven não vê: os subpacotes de cada módulo são internos, e só o pacote raiz é API. O `security` não conhece os
 módulos de negócio nem quem emite o token: cada módulo declara as próprias rotas públicas e regras de rate limit, e o
 `account` traduz o `sub` do token no id do usuário. Trocar o `auth-server` por outro provedor OIDC, como o Keycloak, é
-configuração e migração de dados, sem código no app (ADR-0003, D13).
+configuração e migração de dados, sem código na API (ADR-0003, D13).
 
 Login e validação do token:
 
 ```text
 navegador ou CLI ──login──→ auth-server (8090) ──access token JWT RS256, 15 min──→ cliente
-cliente ──Authorization: Bearer──→ app (8080): assinatura pela chave pública do JWKS (em cache),
+cliente ──Authorization: Bearer──→ api (8080): assinatura pela chave pública do JWKS (em cache),
                                    iss, aud, exp e typ → @CurrentUser → account: sub → id local
 ```
 
-O painel não é cliente direto do app: o navegador só fala com o BFF, na mesma origem, e o BFF guarda os tokens na
+O painel não é cliente direto da API: o navegador só fala com o BFF, na mesma origem, e o BFF guarda os tokens na
 sessão dele ([ADR-0004](docs/adr/0004-frontend-angular.md)).
 
 ```text
 navegador ── cookie de sessão e de CSRF ──→ bff (8070) ├─ a SPA (arquivos estáticos)
    │                                                     ├─ /oauth2/**, /login/**, /bff/**: login, sessão e logout
-   │                                                     └─ /api/v1/links/**, /api/v1/stats ── Bearer ──→ app (8080)
+   │                                                     └─ /api/v1/links/**, /api/v1/stats ── Bearer ──→ api (8080)
    └─ login, cadastro, troca de senha e logout ──→ auth-server (8090)
 ```
 
@@ -104,7 +115,7 @@ dias, guardado só na sessão em memória, que expira depois de 2 horas sem uso.
 login (`/oauth2/authorization/encurtador?returnTo=…`) e devolve o token de CSRF do cookie `XSRF-TOKEN` no cabeçalho
 `X-XSRF-TOKEN`. A `Content-Security-Policy` só aceita scripts da própria origem.
 
-O app busca o JWKS sob demanda e o guarda em cache: um `kid` novo dispara uma busca, limitada a duas por 30 s, e, com
+A API busca o JWKS sob demanda e o guarda em cache: um `kid` novo dispara uma busca, limitada a duas por 30 s, e, com
 o `auth-server` fora, as chaves já obtidas continuam valendo por até um dia. Sem nenhuma chave utilizável, a requisição
 autenticada responde 503 `AUTH_UNAVAILABLE`.
 
@@ -131,19 +142,19 @@ fixada em `.mise.toml`.
 ### Desenvolvimento
 
 O perfil `local` sobe o PostgreSQL, o Redis e o Kafka do `compose.yaml` e liga o Swagger UI. São três aplicações,
-cada uma num terminal: o servidor de autorização, que emite os tokens, o app, que os valida, e o BFF, que serve o
+cada uma num terminal: o servidor de autorização, que emite os tokens, a API, que os valida, e o BFF, que serve o
 painel.
 
 ```bash
-./mvnw -pl auth-server -am spring-boot:run
+./mvnw -pl apps/auth-server -am spring-boot:run
 ```
 
 ```bash
-./mvnw spring-boot:run
+./mvnw -pl apps/api -am spring-boot:run
 ```
 
 ```bash
-./mvnw -pl bff -am spring-boot:run
+./mvnw -pl apps/bff -am spring-boot:run
 ```
 
 - API: http://localhost:8080
@@ -157,16 +168,16 @@ Para mexer no Angular com recarga automática, o `ng serve` sobe o painel em htt
 `/bff`, `/oauth2` e `/login` ao BFF (que precisa estar no ar). O Node é o 26, fixado no `.mise.toml`:
 
 ```bash
-npm --prefix web ci
+npm --prefix frontend/web ci
 ```
 
 ```bash
-npm --prefix web start
+npm --prefix frontend/web start
 ```
 
-Os comandos rodam na raiz, onde fica o `compose.yaml`: ali, o `spring-boot:run` sobe o `app`, o primeiro do reactor,
-e as outras aplicações sobem com `-pl <módulo> -am`. O build do painel instala o próprio Node e roda o lint, os testes
-e o build do Angular. O perfil Maven `local`, ativo por padrão, liga o perfil `local` do
+Os comandos rodam na raiz, onde fica o `compose.yaml`. Cada aplicação sobe com `-pl apps/<aplicação> -am`; sem o
+`-pl`, o `./mvnw spring-boot:run` sobe a API, a primeira aplicação do reactor. O build do painel instala o próprio Node
+e roda o lint, os testes e o build do Angular. O perfil Maven `local`, ativo por padrão, liga o perfil `local` do
 Spring Boot; outro perfil do Spring entra com `-Dspring-boot.run.profiles=<perfil>`. O perfil `local` só funciona pelo
 Maven ou pela IDE: o suporte a Docker Compose não entra no jar empacotado. Nele, o `auth-server` assina com uma chave
 de desenvolvimento versionada, que nunca deve ser usada fora desse perfil.
@@ -175,20 +186,21 @@ No IntelliJ, as Run Configurations vêm com o repositório, em `.idea/runConfigu
 
 | Configuração | O que faz |
 |---|---|
-| `encurtador-url (local)` | Roda `spring-boot:run -pl app -am` pelo Maven na raiz, com o perfil Maven `local`: compila só o `app` e os módulos de que ele depende |
-| `encurtador-url (local, debug)` | Sobe `EncurtadorApplication` direto pela IDE, no módulo `encurtador-url-app`, com o perfil `local`, para depurar com breakpoints |
-| `auth-server (local)` | Roda `spring-boot:run -pl auth-server -am` pelo Maven na raiz, com o perfil Maven `local` |
+| `api (local)` | Roda `spring-boot:run -pl apps/api -am` pelo Maven na raiz, com o perfil Maven `local`: compila só a API e os módulos de que ela depende |
+| `api (local, debug)` | Sobe `EncurtadorApplication` direto pela IDE, no módulo `encurtador-url-api`, com o perfil `local`, para depurar com breakpoints |
+| `auth-server (local)` | Roda `spring-boot:run -pl apps/auth-server -am` pelo Maven na raiz, com o perfil Maven `local` |
 | `auth-server (local, debug)` | Sobe `AuthServerApplication` direto pela IDE, com o perfil `local` |
-| `bff (local)` | Roda `spring-boot:run -pl bff -am` pelo Maven na raiz, com o perfil Maven `local` |
+| `bff (local)` | Roda `spring-boot:run -pl apps/bff -am` pelo Maven na raiz, com o perfil Maven `local` |
 | `bff (local, debug)` | Sobe `BffApplication` direto pela IDE, com o perfil `local` |
 | `stack (local)` | Sobe as três configurações Maven acima juntas |
 
-Todas usam o JDK do projeto, que precisa ser o 25.
+Todas usam o JDK do projeto, que precisa ser o 25. Depois de uma mudança de pasta dos módulos (como a do ADR-0005),
+recarregue o projeto Maven na IDE (Maven → Reload All Maven Projects) para ela achar os módulos pelos nomes novos.
 
 ### Tudo em containers
 
-Os serviços `auth-server`, `app` e `bff` do compose constroem as imagens e sobem junto com a infraestrutura. O painel
-fica em http://localhost:8070. Em segundo plano, liberando o terminal:
+Os serviços `auth-server`, `api` e `bff` do compose constroem as imagens e sobem junto com a infraestrutura; o profile
+`app` é o das aplicações. O painel fica em http://localhost:8070. Em segundo plano, liberando o terminal:
 
 ```bash
 docker compose --profile app up -d --build
@@ -198,6 +210,15 @@ Ou em primeiro plano, com os logs de todos os serviços no terminal (Ctrl+C para
 
 ```bash
 docker compose --profile app up --build
+```
+
+Quem tinha a stack no ar antes do [ADR-0005](docs/adr/0005-organizacao-do-repositorio.md), quando o serviço da API se
+chamava `app`, derruba a stack com `docker compose --profile app down` antes de atualizar o repositório. Senão, o
+container antigo continua segurando a porta 8080, e o serviço `api` não sobe. Com o repositório já atualizado, o
+`--remove-orphans` remove o container antigo; os volumes (banco, Kafka, pgAdmin) continuam:
+
+```bash
+docker compose --profile app down --remove-orphans
 ```
 
 O Swagger UI fica em http://localhost:8080/swagger-ui.html: o compose liga a documentação, que a imagem deixa
@@ -221,43 +242,43 @@ estatística) e pelo painel no Playwright (cadastro, links, estatísticas, troca
 página):
 
 ```bash
-scripts/ponta-a-ponta.sh
+e2e/cli/ponta-a-ponta.sh
 ```
 
-Todos os comandos do Playwright rodam na raiz, como os outros: o `--prefix` aponta para o projeto `web/e2e`. Na
+Todos os comandos do Playwright rodam na raiz, como os outros: o `--prefix` aponta para o projeto `e2e/playwright`. Na
 primeira vez, instale as dependências e o Chromium:
 
 ```bash
-npm --prefix web/e2e ci
+npm --prefix e2e/playwright ci
 ```
 
 ```bash
-npm --prefix web/e2e run browsers
+npm --prefix e2e/playwright run browsers
 ```
 
 Depois, com a stack no ar:
 
 ```bash
-npm --prefix web/e2e test
+npm --prefix e2e/playwright test
 ```
 
 Para ver o navegador executando os testes: com a janela do Chromium aberta e uma pausa entre as ações (`SLOW_MO`, em
 milissegundos; sem ela, o teste completo leva uns 6 segundos):
 
 ```bash
-SLOW_MO=1000 npm --prefix web/e2e run test:headed
+SLOW_MO=2000 npm --prefix e2e/playwright run test:headed
 ```
 
 Ou na interface do Playwright, que mostra cada passo, a página em cada momento e permite rodar um teste de cada vez:
 
 ```bash
-npm --prefix web/e2e run test:ui
+npm --prefix e2e/playwright run test:ui
 ```
 
 Quando um teste falha, o relatório abre com o trace da execução:
 
 ```bash
-npm --prefix web/e2e run report
+npm --prefix e2e/playwright run report
 ```
 
 ### pgAdmin, redis-commander e Kafdrop
@@ -270,7 +291,7 @@ Os três sobem junto com a infraestrutura do compose, nos dois modos acima, e s�
 | redis-commander | http://localhost:8181 | O Redis: o cache de resolução (`link:v1:*`) e os contadores de rate limit (`rl:*`) |
 | Kafdrop | http://localhost:9000 | O Kafka: os tópicos `link-clicks` e `link-clicks-dlt`, suas partições e mensagens, e o atraso do consumer group `click-consumer` |
 
-- O servidor do pgAdmin vem de [docker/pgadmin/servers.json](docker/pgadmin/servers.json), lido só na primeira subida.
+- O servidor do pgAdmin vem de [infra/pgadmin/servers.json](infra/pgadmin/servers.json), lido só na primeira subida.
   Depois de mudar o arquivo, remova o container e o volume do pgAdmin para ele importar de novo (o nome do volume
   leva o nome da pasta do projeto):
 
@@ -285,37 +306,37 @@ Os três sobem junto com a infraestrutura do compose, nos dois modos acima, e s�
 ### Só a imagem
 
 ```bash
-docker build -t encurtador-url .
+docker build -t encurtador-api .
 ```
 
 ```bash
-docker build --build-arg MODULE=auth-server --build-arg HTTP_PORT=8090 --build-arg MANAGEMENT_PORT=8091 -t encurtador-auth-server .
+docker build --build-arg MODULE=apps/auth-server --build-arg HTTP_PORT=8090 --build-arg MANAGEMENT_PORT=8091 -t encurtador-auth-server .
 ```
 
 ```bash
-docker build --build-arg MODULE=bff --build-arg HTTP_PORT=8070 --build-arg MANAGEMENT_PORT=8071 -t encurtador-bff .
+docker build --build-arg MODULE=apps/bff --build-arg HTTP_PORT=8070 --build-arg MANAGEMENT_PORT=8071 -t encurtador-bff .
 ```
 
-O Dockerfile serve para qualquer aplicação do repositório: `--build-arg MODULE=<módulo>` escolhe qual (o padrão é
-`app`), e `HTTP_PORT` e `MANAGEMENT_PORT` ajustam as portas do `EXPOSE` e do `HEALTHCHECK`.
+O Dockerfile serve para qualquer aplicação do repositório: `--build-arg MODULE=<caminho do módulo>` escolhe qual (o
+padrão é `apps/api`), e `HTTP_PORT` e `MANAGEMENT_PORT` ajustam as portas do `EXPOSE` e do `HEALTHCHECK`.
 
 As imagens rodam como usuário sem privilégios, têm `HEALTHCHECK` em `/livez` e recebem a configuração por variáveis de
-ambiente. Todas usam `SPRING_DATA_REDIS_HOST` e `SPRING_DATA_REDIS_PORT`; o app e o `auth-server`, também
+ambiente. Todas usam `SPRING_DATA_REDIS_HOST` e `SPRING_DATA_REDIS_PORT`; a API e o `auth-server`, também
 `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD`. Além delas:
 
 | Aplicação | Variável | Exemplo |
 |---|---|---|
-| app | `APP_BASE_URL` | `https://encurta.dor` (prefixo do `shortUrl`; o encurtador recusa destinos para esse host) |
-| app | `APP_JWT_ISSUER` | `https://auth.encurta.dor`: o `iss` exigido, a URL pública do `auth-server`, cujo host também não pode ser destino de link |
-| app | `APP_JWT_JWK_SET_URI` | `http://auth-server:8090/oauth2/jwks`: de onde vêm as chaves públicas, pela rede interna |
-| app | `SPRING_KAFKA_BOOTSTRAP_SERVERS` | `kafka:29092` |
+| api | `APP_BASE_URL` | `https://encurta.dor` (prefixo do `shortUrl`; o encurtador recusa destinos para esse host) |
+| api | `APP_JWT_ISSUER` | `https://auth.encurta.dor`: o `iss` exigido, a URL pública do `auth-server`, cujo host também não pode ser destino de link |
+| api | `APP_JWT_JWK_SET_URI` | `http://auth-server:8090/oauth2/jwks`: de onde vêm as chaves públicas, pela rede interna |
+| api | `SPRING_KAFKA_BOOTSTRAP_SERVERS` | `kafka:29092` |
 | auth-server | `AUTH_ISSUER` | `https://auth.encurta.dor` (vai no `iss` dos tokens) |
 | auth-server | `AUTH_SIGNING_KEY_ID`, `AUTH_SIGNING_KEY_FILE` | `auth-2`, `file:/run/secrets/auth-signing-key.pem` (PEM PKCS#8; sem ele, a chave é gerada na subida) |
 | auth-server | `AUTH_WEB_CLIENT_SECRET` | segredo do cliente `encurtador-web` (`openssl rand -base64 32`) |
 | auth-server | `AUTH_WEB_REDIRECT_URIS`, `AUTH_WEB_POST_LOGOUT_REDIRECT_URIS` | `https://painel.encurta.dor/login/oauth2/code/encurtador`, `https://painel.encurta.dor/` |
 | auth-server | `AUTH_PANEL_ORIGINS`, `AUTH_PANEL_DEFAULT_URL` | `https://painel.encurta.dor`, `https://painel.encurta.dor/` |
 | bff | `APP_BASE_URL` | `https://painel.encurta.dor` (endereço público do painel) |
-| bff | `BFF_API_URL` | `http://app:8080` (o app, pela rede interna) |
+| bff | `BFF_API_URL` | `http://api:8080` (a API, pela rede interna) |
 | bff | `BFF_AUTH_PUBLIC_URL`, `BFF_AUTH_INTERNAL_URL` | `https://auth.encurta.dor` (o emissor, para onde o navegador vai), `http://auth-server:8090` |
 | bff | `BFF_CLIENT_SECRET` | o mesmo `AUTH_WEB_CLIENT_SECRET` do `auth-server` |
 | bff | `BFF_REGISTRATION_URL`, `BFF_PASSWORD_CHANGE_URL` | páginas de cadastro e de troca de senha do provedor; por padrão, as do `auth-server` |
@@ -383,7 +404,7 @@ A CLI não tem refresh token: depois de 15 minutos, ela confirma um código novo
 
 ## O que cada módulo expõe
 
-**bff** (`bff/`, porta 8070): o painel
+**bff** (`apps/bff/`, porta 8070): o painel
 
 | Caminho | O que é |
 |---|---|
@@ -392,12 +413,12 @@ A CLI não tem refresh token: depois de 15 minutos, ela confirma um código novo
 | `GET /bff/session` | E-mail do usuário (do `id_token`), ou 401 |
 | `GET /bff/register`, `GET /bff/password` | Leva às páginas de cadastro e de troca de senha do provedor, com a volta para o painel |
 | `POST /bff/logout` | Revoga o refresh token, encerra a sessão e devolve a URL de logout do provedor |
-| `/api/v1/links/**`, `/api/v1/stats` | Repasse ao app com o access token, renovado pelo refresh token; outra rota de `/api/**`, 404 |
+| `/api/v1/links/**`, `/api/v1/stats` | Repasse à API com o access token, renovado pelo refresh token; outra rota de `/api/**`, 404 |
 
-Sem sessão, `/api/**` e `/bff/**` respondem 401 em problem+json, nunca um redirecionamento; app fora ou lento, 503
+Sem sessão, `/api/**` e `/bff/**` respondem 401 em problem+json, nunca um redirecionamento; API fora ou lenta, 503
 `UPSTREAM_UNAVAILABLE`; refresh token recusado (por exemplo, depois de uma troca de senha), 401 `SESSION_EXPIRED`.
 
-**auth-server** (`auth-server/`, porta 8090): credenciais, login e emissão de tokens
+**auth-server** (`apps/auth-server/`, porta 8090): credenciais, login e emissão de tokens
 
 | Caminho | O que é |
 |---|---|
@@ -414,7 +435,7 @@ para o Swagger UI e o Postman). O access token leva `sub` (identificador estáve
 `encurtador-api`, `email` e `scope`.
 
 **account** (`modules/account/`): sem rotas. Traduz o `sub` do token no id da conta, criando a conta no primeiro
-acesso; o app guarda só o `subject` e as datas.
+acesso; a API guarda só o `subject` e as datas.
 
 **link** (`modules/link/`): criação, listagem, consulta e remoção de links
 
@@ -453,7 +474,7 @@ Consumidores Kafka:
 |---|---|---|---|---|
 | GET, HEAD | `/{code}` | — | 302 | 404, 410 `LINK_EXPIRED` / `LINK_DELETED`, 429 |
 
-No app, todo erro é `application/problem+json` (RFC 9457) com um `code` estável e, em `VALIDATION_FAILED`, a lista
+Na API, todo erro é `application/problem+json` (RFC 9457) com um `code` estável e, em `VALIDATION_FAILED`, a lista
 `errors[]` com todos os campos inválidos de uma vez. Link de outro usuário responde 404, igual a um inexistente. Token
 ausente, inválido, expirado, de outro emissor ou de outra audiência responde 401; sem chave pública utilizável, 503
 `AUTH_UNAVAILABLE` com `Retry-After`.
@@ -467,9 +488,9 @@ Limites padrão (`app.rate-limit.*`):
 | auth-server | Troca de senha | usuário | 5 em 15 minutos |
 | auth-server | `/oauth2/token` | IP / `client_id` dos clientes confidenciais | 30 por minuto / 600 por minuto |
 | auth-server | Pedido e confirmação de código do dispositivo | IP | 10 por minuto cada |
-| app | Criação de link | usuário | 30 por minuto |
-| app | Redirecionamento | IP | 600 por minuto |
-| app | Estatísticas do usuário | usuário | 30 por minuto |
+| api | Criação de link | usuário | 30 por minuto |
+| api | Redirecionamento | IP | 600 por minuto |
+| api | Estatísticas do usuário | usuário | 30 por minuto |
 | bff | Início do login e do cadastro | IP | 20 por minuto |
 
 ## Testes
@@ -479,10 +500,11 @@ Limites padrão (`app.rate-limit.*`):
 ```
 
 Só exige Docker: o Testcontainers sobe PostgreSQL, Redis, Kafka e Toxiproxy reais. O build roda os testes unitários
-de cada módulo, os de integração (no `app`, no `auth-server` e no `bff`, porque sobem a aplicação inteira), o lint, os
-testes e o build do painel, a verificação de módulos do Spring Modulith e o gate de cobertura (JaCoCo, mínimo de 80% de linhas fora de configuração; hoje em torno de 97%). O gate e
-o relatório ficam no módulo `coverage`, que junta a cobertura de todos: `coverage/target/site/jacoco-aggregate/`. O
-painel tem gate próprio, de 80% de linhas no Vitest (`web/coverage/`).
+de cada módulo, os de integração (na API, no `auth-server` e no `bff`, porque sobem a aplicação inteira), o lint, os
+testes e o build do painel, a verificação de módulos do Spring Modulith e o gate de cobertura (JaCoCo, mínimo de 80%
+de linhas fora de configuração; hoje em torno de 97%). O gate e o relatório ficam no módulo `tools/coverage`, que
+junta a cobertura de todos: `tools/coverage/target/site/jacoco-aggregate/`. O painel tem gate próprio, de 80% de
+linhas no Vitest (`frontend/web/coverage/`).
 
 Para testar um módulo sozinho, com os módulos de que ele depende:
 
@@ -502,17 +524,18 @@ Além dos fluxos da API, os testes cobrem os cenários de falha do ADR:
 - mensagem envenenada vai para a DLT, e evento duplicado vira um único registro;
 - o rate limit responde 429 e libera as requisições com o Redis fora.
 
-Os testes do app não precisam do `auth-server`: um servidor HTTP de teste publica um JWKS com uma chave RSA de teste,
-e os tokens são assinados com ela, pelo mesmo caminho de produção. Os do BFF trocam o app e o `auth-server` por
+Os testes da API não precisam do `auth-server`: um servidor HTTP de teste publica um JWKS com uma chave RSA de teste,
+e os tokens são assinados com ela, pelo mesmo caminho de produção. Os do BFF trocam a API e o `auth-server` por
 servidores HTTP falsos (repasse, renovação e revogação de token, timeouts). A stack inteira é conferida sobre o compose
-pelo `scripts/ponta-a-ponta.sh` e pelo Playwright em `web/e2e`, que o CI roda num job próprio.
+pelos testes de `e2e/`: o `e2e/cli/ponta-a-ponta.sh` e o Playwright em `e2e/playwright`, que o CI roda num job
+próprio.
 
 ## Operação
 
 | Porta | Conteúdo |
 |---|---|
-| 8080 | app: API, redirecionamento, `/livez` e `/readyz` |
-| 8081 | app: actuator completo (`health`, `info`, `metrics`, `prometheus`); só para a rede interna |
+| 8080 | api: rotas `/api/v1/**`, redirecionamento, `/livez` e `/readyz` |
+| 8081 | api: actuator completo (`health`, `info`, `metrics`, `prometheus`); só para a rede interna |
 | 8090 | auth-server: páginas, protocolo OAuth, `/livez` e `/readyz` |
 | 8091 | auth-server: actuator completo; só para a rede interna |
 | 8070 | bff: o painel, `/livez` e `/readyz` |
@@ -534,10 +557,10 @@ com `server.tomcat.remoteip.internal-proxies` restrito aos proxies confiáveis.
 
 **Rotação da chave de assinatura** (ADR-0003, D5): suba o `auth-server` com a chave nova em `AUTH_SIGNING_KEY_ID` e
 `AUTH_SIGNING_KEY_FILE` e a anterior em `APP_AUTH_PREVIOUS_SIGNING_KEY_ID` e `APP_AUTH_PREVIOUS_SIGNING_KEY_LOCATION`.
-O JWKS publica as duas, os tokens novos saem com o `kid` novo, e o app aprende a chave nova sozinho. Depois de 15
+O JWKS publica as duas, os tokens novos saem com o `kid` novo, e a API aprende a chave nova sozinha. Depois de 15
 minutos, o tempo de vida de um access token, retire a anterior.
 
-**Migração das contas** do login antigo do app para o `auth-server`: veja o
+**Migração das contas** do login antigo da API para o `auth-server`: veja o
 [roteiro](docs/runbooks/migracao-auth-server.md).
 
 ## Limitações conhecidas

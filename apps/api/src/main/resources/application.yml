@@ -1,0 +1,132 @@
+# Configuração padrão (produção). Segredos e endereços de infraestrutura vêm de variáveis de ambiente
+# (ver .env.example). Perfis: "local" (application-local.yml) e "test" (src/test/resources).
+spring:
+  application:
+    name: encurtador-api
+  threads:
+    virtual:
+      enabled: true
+  docker:
+    compose:
+      enabled: false
+  datasource:
+    hikari:
+      # Em milissegundos. Curto para não enfileirar requisições quando o Redis cai e tudo vai ao banco (D7).
+      connection-timeout: 2000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  data:
+    redis:
+      timeout: 100ms
+      connect-timeout: 200ms
+  kafka:
+    admin:
+      operation-timeout: 5s
+    producer:
+      acks: all
+      compression-type: lz4
+      properties:
+        enable.idempotence: true
+        # O padrão de 60 s travaria o ClickSender sem metadados do tópico (D8).
+        max.block.ms: 2000
+        delivery.timeout.ms: 30000
+        # O Kafka exige delivery.timeout.ms >= linger.ms + request.timeout.ms; o padrão (30 s) não caberia.
+        request.timeout.ms: 10000
+        linger.ms: 20
+    consumer:
+      group-id: encurtador-analytics
+      auto-offset-reset: earliest
+  web:
+    # Mensagens da API (inclusive as do Bean Validation) sempre em português, independente do Accept-Language.
+    locale: pt_BR
+    locale-resolver: fixed
+
+server:
+  port: 8080
+  shutdown: graceful
+
+management:
+  server:
+    port: 8081
+  metrics:
+    distribution:
+      # Buckets no Prometheus para acompanhar o p99 do redirecionamento (RNF01).
+      percentiles-histogram:
+        shortener.redirect: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  info:
+    java:
+      enabled: true
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+        add-additional-paths: true
+      group:
+        liveness:
+          include: livenessState
+          show-details: never
+        readiness:
+          include: readinessState,db
+          show-details: never
+
+logging:
+  structured:
+    format:
+      console: ecs
+
+springdoc:
+  # Só o perfil "local" liga a documentação (D9).
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+  default-produces-media-type: application/json
+
+app:
+  base-url: http://localhost:8080
+  # Validação dos access tokens do servidor de autorização (ADR-0003, D6). O issuer é a URL pública dele, que vai no
+  # "iss"; o JWKS pode ser buscado por um endereço interno (no compose, http://auth-server:8090/oauth2/jwks).
+  jwt:
+    issuer: http://localhost:8090
+    audience: encurtador-api
+    jwk-set-uri: http://localhost:8090/oauth2/jwks
+    clock-skew: 5s
+  links:
+    # 62^7 ≈ 3,5 × 10^12 códigos (ADR-0001, §1.5 e D3).
+    code-length: 7
+    default-ttl: 30d
+    max-ttl: 365d
+    max-active-per-user: 100
+    # Hosts que um link curto não pode ter como destino, além do próprio encurtador (ADR-0003, D9).
+    service-urls: ${app.jwt.issuer}
+  cache:
+    max-ttl: 10m
+    tombstone-ttl: 1h
+  redis-guard:
+    failure-threshold: 5
+    open-duration: 5s
+  # Janela fixa por alvo (D11). Os limites por IP usam getRemoteAddr(): atrás de proxy, configure
+  # server.forward-headers-strategy=native e server.tomcat.remoteip.internal-proxies com os proxies confiáveis.
+  # Login, cadastro e troca de senha são limitados no auth-server (ADR-0003, D9).
+  rate-limit:
+    link-creation: { requests: 30, window: 1m }
+    redirect: { requests: 600, window: 1m }
+    user-stats: { requests: 30, window: 1m }
+  analytics:
+    buffer-capacity: 10000
+    topic: link-clicks
+    dead-letter-topic: link-clicks-dlt
+    partitions: 3
+    replication-factor: 1
+    default-zone: America/Sao_Paulo

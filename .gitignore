@@ -3,11 +3,12 @@ target/
 
 ### Frontend (ADR-0004, D12) ###
 node_modules/
-web/node/
+frontend/web/node/
 .angular/
 dist/
-coverage/
-!/coverage/
+# Só a saída do Vitest: uma regra para toda pasta chamada coverage ignoraria também o módulo tools/coverage
+# (ADR-0005, D5).
+/frontend/web/coverage/
 playwright-report/
 test-results/
 

@@ -1,0 +1,33 @@
+# Perfil de desenvolvimento: sobe o compose.yaml automaticamente e liga o Swagger.
+# Uso: ./mvnw -pl apps/api -am spring-boot:run
+spring:
+  docker:
+    compose:
+      enabled: true
+      lifecycle-management: start-only
+  kafka:
+    # O suporte a Docker Compose do Spring Boot não cria conexão para o Kafka (ADR-0001, D15).
+    bootstrap-servers: localhost:9092
+
+logging:
+  structured:
+    format:
+      console: ""
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    # Login no "Authorize" pelo fluxo de código com PKCE, com o cliente público encurtador-dev do auth-server
+    # (ADR-0003, D10). O auth-server libera CORS de /oauth2/token para http://localhost:8080 no perfil local.
+    oauth:
+      client-id: encurtador-dev
+      use-pkce-with-authorization-code-grant: true
+      scopes: openid,email
+
+app:
+  openapi:
+    oauth2:
+      authorization-url: http://localhost:8090/oauth2/authorize
+      token-url: http://localhost:8090/oauth2/token

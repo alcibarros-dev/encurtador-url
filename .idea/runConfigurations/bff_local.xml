@@ -19,7 +19,7 @@
       </option>
       <option name="myRunnerParameters">
         <MavenRunnerParameters>
-          <option name="cmdOptions" value="-pl bff -am" />
+          <option name="cmdOptions" value="-pl apps/bff -am" />
           <option name="profiles">
             <set />
           </option>

@@ -37,7 +37,7 @@ lê `public.users` ou, se ela já tiver sido renomeada, `public.accounts`:
 
 ```bash
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U encurtador -d encurtador \
-  < auth-server/scripts/importar-usuarios.sql
+  < apps/auth-server/scripts/importar-usuarios.sql
 ```
 
 Confira que todos os usuários vieram:
@@ -54,11 +54,11 @@ hoje.
 
 Suba a versão do app sem o pacote `identity` parando o Flyway na V4: a mesma versão já traz a V5, que só deve rodar
 no passo 4. Enquanto durar a virada, o app precisa da variável `SPRING_FLYWAY_TARGET=4`: no compose, acrescente
-`SPRING_FLYWAY_TARGET: "4"` ao `environment` do serviço `app` (uma variável só no shell não chega ao container); fora
-dele, a mesma variável de ambiente. Depois:
+`SPRING_FLYWAY_TARGET: "4"` ao `environment` do serviço `api`, o do app (uma variável só no shell não chega ao
+container); fora dele, a mesma variável de ambiente. Depois:
 
 ```bash
-docker compose --profile app up -d --build app
+docker compose --profile app up -d --build api
 ```
 
 Confira que cada conta tem o `subject` igual ao id e que os links continuam com o mesmo dono:
@@ -71,7 +71,7 @@ select count(*) from public.links l left join public.accounts a on a.id = l.owne
 Teste a virada de ponta a ponta com uma conta nova:
 
 ```bash
-scripts/ponta-a-ponta.sh
+e2e/cli/ponta-a-ponta.sh
 ```
 
 E com um usuário migrado: faça login pela CLI (fluxo de dispositivo, README) com o e-mail e a senha de antes e liste os

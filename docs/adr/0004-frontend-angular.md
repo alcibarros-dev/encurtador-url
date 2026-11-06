@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-11-04), após a revisão 1 (§8) · **implementado** (W0 a W6 e WA, 2026-11-06; notas de implementação em §8) |
+| Status | **Aceito** (2026-11-04), após a revisão 1 (§8) · **implementado** (W0 a W6 e WA, 2026-11-06; notas de implementação em §8) · D2, D11 e D12 ajustadas pelo ADR-0005 |
 | Data | 2026-11-04 |
 | Escopo | Painel web do encurtador: conta (cadastro, login, logout, troca de senha), gestão de links e estatísticas |
 | Depende de | ADR-0003 (servidor de autorização, ainda não implementado) e ADR-0002 (estrutura em módulos) |
@@ -88,6 +88,9 @@ navegador ── HTTPS, cookie de sessão, mesma origem ──→ bff (porta 807
   domínios.
 
 ### D2 — Estrutura no repositório
+
+> **Ajustada pelo ADR-0005** (2026-11-06): o `web` fica em `frontend/web`, e o `bff`, em `apps/bff`; o Playwright sai do
+> `web` (D11).
 
 Dois módulos novos, na raiz, ao lado das outras aplicações (ADR-0002 D1):
 
@@ -283,6 +286,8 @@ GET /api/v1/stats?from=2026-10-06&to=2026-11-04&tz=America/Sao_Paulo
 
 ### D11 — Testes e qualidade
 
+> **Ajustada pelo ADR-0005** (2026-11-06): o Playwright fica em `e2e/playwright`.
+
 | Nível | Ferramenta | Cobre |
 |---|---|---|
 | Unitário e de componente | Vitest e `HttpTestingController` | Serviços, interceptors, guards, mapa de erros, formulários, fallback do fuso e componentes de cada página |
@@ -295,6 +300,9 @@ GET /api/v1/stats?from=2026-10-06&to=2026-11-04&tz=America/Sao_Paulo
   próprio do CI, depois do build das imagens.
 
 ### D12 — Build, execução local e entrega
+
+> **Ajustada pelo ADR-0005** (2026-11-06): o Dockerfile copia `frontend/web/`; no compose, o BFF chama a API em
+> `http://api:8080`; o BFF sobe com `./mvnw -pl apps/bff -am spring-boot:run`.
 
 - **Node:** o Angular 22 aceita Node `^22.22.3`, `^24.15.0` ou `>=26.0.0`; o Node 25 instalado nesta máquina não é
   suportado. O `.mise.toml` passa a fixar o Node 26 (LTS), e o `frontend-maven-plugin` instala a mesma versão no CI e

@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="stack (local)" type="CompoundRunConfigurationType">
     <toRun name="auth-server (local)" type="MavenRunConfiguration" />
-    <toRun name="encurtador-url (local)" type="MavenRunConfiguration" />
+    <toRun name="api (local)" type="MavenRunConfiguration" />
     <toRun name="bff (local)" type="MavenRunConfiguration" />
     <method v="2" />
   </configuration>
