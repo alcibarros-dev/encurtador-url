@@ -2,9 +2,9 @@ package br.com.encurtador.link.api;
 
 import br.com.encurtador.link.application.LinkService;
 import br.com.encurtador.link.application.LinkView;
-import br.com.encurtador.security.CurrentUser;
-import br.com.encurtador.security.OpenApiSecurity;
 import br.com.encurtador.shared.config.AppProperties;
+import dev.alcibarros.auth.security.CurrentUser;
+import dev.alcibarros.auth.security.OpenApiSecurity;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;

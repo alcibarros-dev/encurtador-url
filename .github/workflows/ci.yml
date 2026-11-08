@@ -7,6 +7,12 @@ on:
 
 permissions:
   contents: read
+  # As bibliotecas de segurança vêm do GitHub Packages do repositório alcibarros-dev/auth (ADR-0007, D7).
+  packages: read
+
+# O .mvn/github-settings.xml lê o token daqui; o GITHUB_ACTOR já vem do Actions.
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   verify:
@@ -43,8 +49,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Uma imagem por aplicação, com o mesmo Dockerfile (ADR-0002, D9; ADR-0003, D11; ADR-0006, D1). O module é o
-        # caminho do módulo; o name, só o nome do check (ADR-0005, D8).
+        # Uma imagem por aplicação, com o mesmo Dockerfile (ADR-0002, D9; ADR-0006, D1). O module é o caminho do
+        # módulo; o name, só o nome do check (ADR-0005, D8). O servidor de autorização tem repositório e imagem
+        # próprios, que o e2e baixa do ghcr.io (ADR-0007).
         include:
           - name: api
             module: apps/api
@@ -56,11 +63,6 @@ jobs:
             image: encurtador-redirect
             http-port: 8060
             management-port: 8061
-          - name: auth-server
-            module: apps/auth-server
-            image: encurtador-auth-server
-            http-port: 8090
-            management-port: 8091
           - name: bff
             module: apps/bff
             image: encurtador-bff
@@ -72,6 +74,8 @@ jobs:
       - name: docker build
         run: >-
           docker build
+          --secret id=github_actor,env=GITHUB_ACTOR
+          --secret id=github_token,env=GITHUB_TOKEN
           --build-arg MODULE=${{ matrix.module }}
           --build-arg HTTP_PORT=${{ matrix.http-port }}
           --build-arg MANAGEMENT_PORT=${{ matrix.management-port }}

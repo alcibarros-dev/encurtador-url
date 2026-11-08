@@ -1,7 +1,7 @@
 package br.com.encurtador.account;
 
-import br.com.encurtador.security.UserIdResolver;
 import br.com.encurtador.support.IntegrationTest;
+import dev.alcibarros.auth.security.UserIdResolver;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-11-06), após a revisão 1 (§8) · **implementado** (O0 a O2, 2026-11-06; notas de implementação no §9; o critério 8 do D9 depende do primeiro run do CI) · D1 ajustada pelo ADR-0006 |
+| Status | **Aceito** (2026-11-06), após a revisão 1 (§8) · **implementado** (O0 a O2, 2026-11-06; notas de implementação no §9; o critério 8 do D9 depende do primeiro run do CI) · D1 ajustada pelos ADRs 0006 e 0007 |
 | Data | 2026-11-06 |
 | Escopo | Pastas da raiz do repositório: onde ficam as aplicações, o frontend, os testes de ponta a ponta, as ferramentas de build e os arquivos de ambiente. Nenhum comportamento da aplicação muda |
 | Ajusta | ADR-0002 D1, D2, D7, D8 e D9; ADR-0003 D2, D8, D11 e D12; ADR-0004 D2, D11 e D12 |
@@ -45,6 +45,10 @@ Problemas que isso causa na leitura:
 
 > **Ajustada pelo ADR-0006** (2026-11-07): `apps/` ganha `redirect/` (porta 8060, com o código que era de
 > `modules/redirect`); `modules/` perde `redirect/` e ganha `clicks/` e `link-cache/`.
+>
+> **Ajustada pelo ADR-0007** (2026-11-08): `apps/` perde `auth-server/`, que vai para o repositório
+> [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth) e chega como imagem; `infra/` ganha `auth-server/`,
+> com a configuração do encurtador para ela e o script de importação das contas.
 
 ```text
 encurtador-url/

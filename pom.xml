@@ -21,8 +21,6 @@
     <modules>
         <module>platform/shared</module>
         <module>platform/ratelimit</module>
-        <module>platform/security-api</module>
-        <module>platform/security</module>
         <module>modules/account</module>
         <module>modules/link</module>
         <module>modules/clicks</module>
@@ -31,7 +29,6 @@
         <!-- A API antes das outras aplicações: o spring-boot:run sem -pl sobe a primeira do reactor (ADR-0005, D7) -->
         <module>apps/api</module>
         <module>apps/redirect</module>
-        <module>apps/auth-server</module>
         <module>frontend/web</module>
         <module>apps/bff</module>
         <module>tools/coverage</module>
@@ -43,11 +40,26 @@
         <springdoc.version>3.2.0</springdoc.version>
         <jacoco.version>0.8.16</jacoco.version>
         <jacoco.minimum-line-coverage>0.80</jacoco.minimum-line-coverage>
-        <!-- Só as aplicações (apps/api, apps/redirect, apps/auth-server, apps/bff) rodam com spring-boot:run; as
-             bibliotecas o ignoram. Na raiz, sobe a API, a primeira do reactor; cada aplicação roda com
-             -pl apps/<aplicação> -am (ADR-0003, D11; ADR-0005, D7; ADR-0006, D1) -->
+        <!-- Versão das bibliotecas de segurança do repositório auth; a mesma da imagem do auth-server no compose -->
+        <auth.version>0.1.0</auth.version>
+        <!-- Só as aplicações (apps/api, apps/redirect, apps/bff) rodam com spring-boot:run; as bibliotecas o
+             ignoram. Na raiz, sobe a API, a primeira do reactor; cada aplicação roda com -pl apps/<aplicação> -am
+             (ADR-0005, D7; ADR-0006, D1). O servidor de autorização vem como imagem, pelo compose (ADR-0007) -->
         <spring-boot.run.skip>true</spring-boot.run.skip>
     </properties>
+
+    <!-- O GitHub Packages exige token até para pacotes públicos: o servidor "github" do ~/.m2/settings.xml, com um
+         token com read:packages (ver README). No CI, o GITHUB_TOKEN. -->
+    <repositories>
+        <repository>
+            <id>github</id>
+            <name>alcibarros-dev/auth no GitHub Packages</name>
+            <url>https://maven.pkg.github.com/alcibarros-dev/auth</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <dependencyManagement>
         <dependencies>
@@ -61,15 +73,16 @@
                 <artifactId>encurtador-url-ratelimit</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!-- Segurança do repositório alcibarros-dev/auth, pelo GitHub Packages (ADR-0007, D7) -->
             <dependency>
-                <groupId>br.com.encurtador</groupId>
-                <artifactId>encurtador-url-security-api</artifactId>
-                <version>${project.version}</version>
+                <groupId>dev.alcibarros</groupId>
+                <artifactId>auth-security-api</artifactId>
+                <version>${auth.version}</version>
             </dependency>
             <dependency>
-                <groupId>br.com.encurtador</groupId>
-                <artifactId>encurtador-url-security</artifactId>
-                <version>${project.version}</version>
+                <groupId>dev.alcibarros</groupId>
+                <artifactId>auth-security</artifactId>
+                <version>${auth.version}</version>
             </dependency>
             <dependency>
                 <groupId>br.com.encurtador</groupId>
@@ -104,11 +117,6 @@
             <dependency>
                 <groupId>br.com.encurtador</groupId>
                 <artifactId>encurtador-url-api</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>br.com.encurtador</groupId>
-                <artifactId>encurtador-url-auth-server</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

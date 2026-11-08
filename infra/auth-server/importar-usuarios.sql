@@ -2,7 +2,7 @@
 --
 -- Roda uma vez, antes da V4 do app, com um usuário que leia public.users (ou public.accounts, se a V4 já tiver
 -- rodado sem apagar as senhas) e escreva em auth.credentials:
---   psql "$DATABASE_URL" -f apps/auth-server/scripts/importar-usuarios.sql
+--   psql "$DATABASE_URL" -f infra/auth-server/importar-usuarios.sql
 --
 -- O subject é o id atual em texto, o mesmo que o app grava em accounts.subject: os links continuam com os mesmos
 -- donos. Os hashes bcrypt continuam válidos. É idempotente: rodar de novo não duplica nada.

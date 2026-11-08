@@ -10,14 +10,17 @@ Kafka, feita a partir de ADRs revisados antes da primeira linha de código:
 - [ADR-0004](docs/adr/0004-frontend-angular.md): painel web em Angular, atrás de um BFF (implementado);
 - [ADR-0005](docs/adr/0005-organizacao-do-repositorio.md): organização do repositório por papel (implementado);
 - [ADR-0006](docs/adr/0006-servico-de-redirecionamento.md): redirecionamento como serviço próprio, que escala sem a
-  API (implementado).
+  API (implementado);
+- [ADR-0007](docs/adr/0007-servidor-de-autorizacao-em-repositorio-proprio.md): servidor de autorização em repositório
+  próprio, usado aqui como imagem (implementado).
 
 **O que ele faz**
 
 - Painel web (Angular, atrás de um BFF): cadastro, login, logout e troca de senha pelas páginas do `auth-server`,
   gestão dos links e estatísticas do usuário. Nenhum token chega ao navegador: ele só tem o cookie de sessão do BFF.
-- Contas num servidor de autorização próprio (`auth-server`, OAuth 2.1 e OpenID Connect): cadastro, login, logout e
-  troca de senha em páginas dele, e login da CLI pelo fluxo de dispositivo. A API nunca vê senha: valida os access
+- Contas num servidor de autorização próprio (`auth-server`, OAuth 2.1 e OpenID Connect, do repositório
+  [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth)): cadastro, login, logout e troca de senha em páginas
+  dele, e login da CLI pelo fluxo de dispositivo. A API nunca vê senha: valida os access
   tokens pelas chaves públicas do emissor e continua validando com ele fora do ar.
 - Links com código aleatório de 7 caracteres ou alias próprio, validade de 1 minuto a 365 dias e cota de 100 links
   ativos por usuário. O destino é validado como entrada hostil: só `http`/`https`, sem credenciais, sem IP privado
@@ -38,10 +41,14 @@ Chart.js · Vitest · Playwright com axe-core.
 ## Arquitetura
 
 Monólito modular dividido em módulos Maven ([ADR-0002](docs/adr/0002-modulos-maven.md)): plataforma técnica de um
-lado, negócio do outro, e uma aplicação que junta o negócio, a API. Ao lado dela, no mesmo repositório, três
-aplicações separadas: o servidor de autorização ([ADR-0003](docs/adr/0003-servidor-de-autorizacao.md)), o BFF do
-painel ([ADR-0004](docs/adr/0004-frontend-angular.md)) e o serviço de redirecionamento, que atende os links curtos e
-escala sem a API ([ADR-0006](docs/adr/0006-servico-de-redirecionamento.md)). A API e o redirect combinam só dois
+lado, negócio do outro, e uma aplicação que junta o negócio, a API. Ao lado dela, no mesmo repositório, duas
+aplicações separadas: o BFF do painel ([ADR-0004](docs/adr/0004-frontend-angular.md)) e o serviço de
+redirecionamento, que atende os links curtos e escala sem a API
+([ADR-0006](docs/adr/0006-servico-de-redirecionamento.md)). O servidor de autorização
+([ADR-0003](docs/adr/0003-servidor-de-autorizacao.md)) tem repositório próprio,
+[alcibarros-dev/auth](https://github.com/alcibarros-dev/auth), para ser reaproveitado por outros projetos: aqui ele
+chega como a imagem `ghcr.io/alcibarros-dev/auth`, com os clientes do encurtador num arquivo de configuração
+([ADR-0007](docs/adr/0007-servidor-de-autorizacao-em-repositorio-proprio.md)). A API e o redirect combinam só dois
 contratos, o cache no Redis e o evento de clique no Kafka, e o redirect lê a tabela `links` da API, só para leitura.
 Cada pasta da raiz tem um papel ([ADR-0005](docs/adr/0005-organizacao-do-repositorio.md)):
 
@@ -50,7 +57,6 @@ encurtador-url/
 ├── apps/               o que roda como processo e vira imagem
 │   ├── api/            API (8080): links, estatísticas, contas; classe principal, migrações, testes de integração
 │   ├── redirect/       links curtos GET /{code} (8060): cache-aside, leitura no PostgreSQL, cliques → Kafka
-│   ├── auth-server/    servidor de autorização (8090): login, cadastro, troca de senha, tokens RS256, JWKS
 │   └── bff/            BFF do painel (8070): entrega a SPA, login OIDC, sessão e repasse de /api/** à API
 ├── frontend/
 │   └── web/            painel em Angular, empacotado no jar do bff (META-INF/resources)
@@ -62,15 +68,14 @@ encurtador-url/
 │   └── link-cache/     o cache link:v1:{code} no Redis, contrato entre o redirect e a API
 ├── platform/           técnico
 │   ├── shared/         erros RFC 9457, tempo, UUIDv7, disjuntor do Redis
-│   ├── ratelimit/      janela fixa no Redis (Lua) e o filtro que aplica as regras de cada módulo
-│   ├── security-api/   contratos de segurança, sem framework: @CurrentUser, UserIdResolver, PublicRoutes
-│   └── security/       validação do token pelo JWKS, cadeia de filtros, respostas 401, 403 e 503
+│   └── ratelimit/      janela fixa no Redis (Lua) e o filtro que aplica as regras de cada módulo
 ├── e2e/                testes da stack inteira, sobre o compose
 │   ├── cli/            ponta-a-ponta.sh: cadastro, login da CLI, link, redirecionamento, estatística e remoção
 │   └── playwright/     o painel no navegador, com o axe
 ├── tools/
 │   └── coverage/       sem código: o gate de cobertura de todos os módulos
 ├── infra/
+│   ├── auth-server/    clientes OAuth do encurtador para a imagem do auth, e o script de importação das contas
 │   └── pgadmin/        servidor pré-cadastrado do pgAdmin
 └── docs/               ADRs, roteiros de operação e o mapa dos componentes (componentes.html)
 ```
@@ -87,24 +92,29 @@ Dependências entre módulos:
 
 | Módulo | Depende de |
 |---|---|
-| `shared`, `security-api` | — |
+| `shared` | — |
 | `ratelimit` | `shared` |
-| `security` | `security-api`, `shared` |
-| `account` | `security-api` |
-| `link` | `security-api`, `ratelimit`, `shared` |
+| `account` | `auth-security-api` |
+| `link` | `auth-security-api`, `ratelimit`, `shared` |
 | `clicks` | — |
 | `link-cache` | `shared` |
-| `analytics` | `clicks`, `link`, `security-api`, `ratelimit`, `shared` |
-| `api` | todos os de plataforma e de negócio |
+| `analytics` | `clicks`, `link`, `auth-security-api`, `ratelimit`, `shared` |
+| `api` | todos os de plataforma e de negócio, e `auth-security` |
 | `redirect` (`apps/redirect`) | `link-cache`, `clicks`, `ratelimit`, `shared` |
-| `auth-server` | `shared`, `ratelimit` |
 | `web` | — (só pacotes do npm) |
 | `bff` | `web`, `shared`, `ratelimit` |
 | `coverage` | todos os de Java |
 
+A segurança das APIs vem do repositório [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth), o mesmo do
+servidor de autorização, em duas bibliotecas publicadas no GitHub Packages
+([ADR-0007](docs/adr/0007-servidor-de-autorizacao-em-repositorio-proprio.md), D7): o `auth-security-api`, com os
+contratos que os módulos de negócio usam (`@CurrentUser`, `UserIdResolver`, `PublicRoutes`, `OpenApiSecurity`), e o
+`auth-security`, que valida o token pelo JWKS e responde 401, 403 e 503. A versão fica em `auth.version`, no `pom.xml`
+da raiz, e é a mesma da imagem do `auth-server` no compose.
+
 O Maven barra na compilação um import de módulo não declarado. O Spring Modulith continua verificando a cada build o
-que o Maven não vê: os subpacotes de cada módulo são internos, e só o pacote raiz é API. O `security` não conhece os
-módulos de negócio nem quem emite o token: cada módulo declara as próprias rotas públicas e regras de rate limit, e o
+que o Maven não vê: os subpacotes de cada módulo são internos, e só o pacote raiz é API. O `auth-security` não conhece
+os módulos de negócio nem quem emite o token: cada módulo declara as próprias rotas públicas e regras de rate limit, e o
 `account` traduz o `sub` do token no id do usuário. Trocar o `auth-server` por outro provedor OIDC, como o Keycloak, é
 configuração e migração de dados, sem código na API (ADR-0003, D13).
 
@@ -164,23 +174,33 @@ grava o tombstone no mesmo Redis, depois do commit. Para atender mais cliques, s
 atrás de um balanceador, sem mexer na API. Os motivos de cada escolha, as alternativas descartadas e as notas de
 implementação de cada fase estão nos ADRs: o [0001](docs/adr/0001-arquitetura-encurtador-url.md) para a arquitetura,
 o [0002](docs/adr/0002-modulos-maven.md) para a divisão em módulos, o
-[0003](docs/adr/0003-servidor-de-autorizacao.md) para o servidor de autorização e o
-[0006](docs/adr/0006-servico-de-redirecionamento.md) para o serviço de redirecionamento.
+[0003](docs/adr/0003-servidor-de-autorizacao.md) para o servidor de autorização, o
+[0006](docs/adr/0006-servico-de-redirecionamento.md) para o serviço de redirecionamento e o
+[0007](docs/adr/0007-servidor-de-autorizacao-em-repositorio-proprio.md) para a saída do servidor de autorização para
+um repositório próprio.
 
 ## Como rodar
 
 Pré-requisitos: Docker e Java 25. Com o [mise](https://mise.jdx.dev), `mise install` na raiz instala a versão
 fixada em `.mise.toml`.
 
-### Desenvolvimento
-
-O perfil `local` sobe a infraestrutura do `compose.yaml` (PostgreSQL, Redis, Kafka e as ferramentas de inspeção) e
-liga o Swagger UI. São quatro aplicações, cada uma num terminal: o servidor de autorização, que emite os tokens, a
-API, que os valida, o redirect, que atende os links curtos, e o BFF, que serve o painel.
+As bibliotecas de segurança (`auth-security`, `auth-security-api`) vêm do GitHub Packages, que exige token até para
+pacotes públicos. Crie um token (classic) com o escopo `read:packages` em GitHub → Settings → Developer settings →
+Personal access tokens e deixe as duas variáveis no ambiente, por exemplo no `~/.zshrc`:
 
 ```bash
-./mvnw -pl apps/auth-server -am spring-boot:run
+export GITHUB_ACTOR=<seu-usuário-do-github> GITHUB_TOKEN=<token-com-read:packages>
 ```
+
+O `.mvn/maven.config` liga o `.mvn/github-settings.xml`, que lê as duas, em todo `./mvnw` e na IDE; o
+`docker compose --build` e o `docker build` as passam ao build das imagens como secrets do BuildKit, fora das camadas.
+Depois do primeiro download, os jars ficam no `~/.m2`. No CI, o `GITHUB_TOKEN` do Actions faz o mesmo.
+
+### Desenvolvimento
+
+O perfil `local` sobe a infraestrutura do `compose.yaml` (PostgreSQL, Redis, Kafka, as ferramentas de inspeção e o
+servidor de autorização, que emite os tokens) e liga o Swagger UI. São três aplicações, cada uma num terminal: a API,
+que valida os tokens, o redirect, que atende os links curtos, e o BFF, que serve o painel.
 
 ```bash
 ./mvnw -pl apps/api -am spring-boot:run
@@ -213,8 +233,14 @@ Os comandos rodam na raiz, onde fica o `compose.yaml`. Cada aplicação sobe com
 `-pl`, o `./mvnw spring-boot:run` sobe a API, a primeira aplicação do reactor. O build do painel instala o próprio Node
 e roda o lint, os testes e o build do Angular. O perfil Maven `local`, ativo por padrão, liga o perfil `local` do
 Spring Boot; outro perfil do Spring entra com `-Dspring-boot.run.profiles=<perfil>`. O perfil `local` só funciona pelo
-Maven ou pela IDE: o suporte a Docker Compose não entra no jar empacotado. Nele, o `auth-server` assina com uma chave
-de desenvolvimento versionada, que nunca deve ser usada fora desse perfil.
+Maven ou pela IDE: o suporte a Docker Compose não entra no jar empacotado.
+
+O servidor de autorização vem pronto, na versão fixada no `compose.yaml` (`AUTH_IMAGE_TAG` troca a versão). Os
+clientes OAuth, a audiência dos tokens e o nome das páginas ficam em
+[`infra/auth-server/application.yml`](infra/auth-server/application.yml), que o compose monta no container. Para
+mexer no próprio servidor, use o repositório [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth); para testar
+uma versão dele aqui antes de publicá-la, construa a imagem lá com a tag que o compose usa
+(`docker build -t ghcr.io/alcibarros-dev/auth:0.1.0 .`).
 
 No IntelliJ, as Run Configurations vêm com o repositório, em `.idea/runConfigurations/`:
 
@@ -224,19 +250,17 @@ No IntelliJ, as Run Configurations vêm com o repositório, em `.idea/runConfigu
 | `api (local, debug)` | Sobe `EncurtadorApplication` direto pela IDE, no módulo `encurtador-url-api`, com o perfil `local`, para depurar com breakpoints |
 | `redirect (local)` | Roda `spring-boot:run -pl apps/redirect -am` pelo Maven na raiz, com o perfil Maven `local` |
 | `redirect (local, debug)` | Sobe `RedirectApplication` direto pela IDE, no módulo `encurtador-url-redirect`, com o perfil `local` |
-| `auth-server (local)` | Roda `spring-boot:run -pl apps/auth-server -am` pelo Maven na raiz, com o perfil Maven `local` |
-| `auth-server (local, debug)` | Sobe `AuthServerApplication` direto pela IDE, com o perfil `local` |
 | `bff (local)` | Roda `spring-boot:run -pl apps/bff -am` pelo Maven na raiz, com o perfil Maven `local` |
 | `bff (local, debug)` | Sobe `BffApplication` direto pela IDE, com o perfil `local` |
-| `stack (local)` | Sobe as quatro configurações Maven acima juntas |
+| `stack (local)` | Sobe as três configurações Maven acima juntas |
 
 Todas usam o JDK do projeto, que precisa ser o 25. Depois de uma mudança de pasta dos módulos (como a do ADR-0005),
 recarregue o projeto Maven na IDE (Maven → Reload All Maven Projects) para ela achar os módulos pelos nomes novos.
 
 ### Tudo em containers
 
-Os serviços `auth-server`, `api`, `redirect` e `bff` do compose constroem as imagens e sobem junto com a
-infraestrutura; o profile `app` é o das aplicações. O painel fica em http://localhost:8070, e os links curtos, em
+Os serviços `api`, `redirect` e `bff` do compose constroem as imagens e sobem junto com a infraestrutura e o
+`auth-server`; o profile `app` é o das aplicações. O painel fica em http://localhost:8070, e os links curtos, em
 http://localhost:8060. Em segundo plano, liberando o terminal:
 
 ```bash
@@ -271,11 +295,11 @@ entra por um secret do orquestrador. O segredo do cliente `encurtador-web`, do p
 desenvolvimento no compose; para usar outro, defina `AUTH_WEB_CLIENT_SECRET` num `.env` na raiz, que o compose lê
 sozinho e o Git ignora.
 
-Para conferir a stack inteira de ponta a ponta, as quatro aplicações juntas: pela CLI (cadastro, fluxo de
-dispositivo, link criado na API, redirecionamento no serviço `redirect`, clique nas estatísticas e o 410 depois da
-remoção) e pelo painel no Playwright (cadastro, links, o `shortUrl` apontando para o serviço `redirect`, o
-`GET /{code}` nele e o 401 na API, o clique chegando às estatísticas, o 410 depois da remoção, troca de senha e saída,
-com o axe em cada página). Os dois usam os endereços do compose; `API_URL` e `REDIRECT_URL` os trocam:
+Para conferir a stack inteira de ponta a ponta, as três aplicações e o `auth-server` juntos: pela CLI (cadastro, fluxo
+de dispositivo, link criado na API, redirecionamento no serviço `redirect`, clique nas estatísticas e o 410 depois da
+remoção) e pelo painel no Playwright (cadastro, links, o `shortUrl` apontando para o serviço `redirect`, o `GET /{code}`
+nele e o 401 na API, o clique chegando às estatísticas, o 410 depois da remoção, troca de senha e saída, com o axe em
+cada página). Os dois usam os endereços do compose; `API_URL` e `REDIRECT_URL` os trocam:
 
 ```bash
 e2e/cli/ponta-a-ponta.sh
@@ -338,9 +362,9 @@ para a operação.
   Redis e, no redirect, a publicação no Kafka (`kafkaPublish`). Nada do sistema depende dela, mas o monitoramento
   depende: em produção, só a rede interna deve alcançá-la, nunca a internet. Detalhes em [Operação](#operação).
 - **Swagger UI:** http://localhost:8080/swagger-ui.html, na porta pública da API. O perfil `local` e o compose ligam a
-  documentação, que a imagem deixa desligada por padrão. No perfil `local`, o botão Authorize faz login no
-  `auth-server` pelo fluxo de código com PKCE, com o cliente `encurtador-dev`. No compose, que não tem esse cliente,
-  cole um access token obtido pela CLI (veja [Usando a API](#usando-a-api)).
+  documentação, que a imagem deixa desligada por padrão. O botão Authorize faz login no `auth-server` pelo fluxo de
+  código com PKCE, com o cliente `encurtador-dev`; também dá para colar um access token obtido pela CLI (veja
+  [Usando a API](#usando-a-api)).
 
 #### Ferramentas de inspeção
 
@@ -371,23 +395,20 @@ O pgAdmin, o redis-commander e o Kafdrop sobem junto com a infraestrutura do com
 ### Só a imagem
 
 ```bash
-docker build -t encurtador-api .
+docker build --secret id=github_actor,env=GITHUB_ACTOR --secret id=github_token,env=GITHUB_TOKEN -t encurtador-api .
 ```
 
 ```bash
-docker build --build-arg MODULE=apps/redirect --build-arg HTTP_PORT=8060 --build-arg MANAGEMENT_PORT=8061 -t encurtador-redirect .
+docker build --secret id=github_actor,env=GITHUB_ACTOR --secret id=github_token,env=GITHUB_TOKEN --build-arg MODULE=apps/redirect --build-arg HTTP_PORT=8060 --build-arg MANAGEMENT_PORT=8061 -t encurtador-redirect .
 ```
 
 ```bash
-docker build --build-arg MODULE=apps/auth-server --build-arg HTTP_PORT=8090 --build-arg MANAGEMENT_PORT=8091 -t encurtador-auth-server .
-```
-
-```bash
-docker build --build-arg MODULE=apps/bff --build-arg HTTP_PORT=8070 --build-arg MANAGEMENT_PORT=8071 -t encurtador-bff .
+docker build --secret id=github_actor,env=GITHUB_ACTOR --secret id=github_token,env=GITHUB_TOKEN --build-arg MODULE=apps/bff --build-arg HTTP_PORT=8070 --build-arg MANAGEMENT_PORT=8071 -t encurtador-bff .
 ```
 
 O Dockerfile serve para qualquer aplicação do repositório: `--build-arg MODULE=<caminho do módulo>` escolhe qual (o
-padrão é `apps/api`), e `HTTP_PORT` e `MANAGEMENT_PORT` ajustam as portas do `EXPOSE` e do `HEALTHCHECK`.
+padrão é `apps/api`), e `HTTP_PORT` e `MANAGEMENT_PORT` ajustam as portas do `EXPOSE` e do `HEALTHCHECK`. A imagem do
+`auth-server` é publicada pelo repositório dele, `ghcr.io/alcibarros-dev/auth`.
 
 As imagens rodam como usuário sem privilégios, têm `HEALTHCHECK` em `/livez` e recebem a configuração por variáveis de
 ambiente. Todas usam `SPRING_DATA_REDIS_HOST` e `SPRING_DATA_REDIS_PORT`; a API, o redirect e o `auth-server`,
@@ -403,10 +424,12 @@ também `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOUR
 | redirect | `SPRING_KAFKA_BOOTSTRAP_SERVERS` | `kafka:29092` |
 | redirect | `SPRING_DATASOURCE_URL` | pode apontar para uma réplica de leitura: o redirect só lê a tabela `links` |
 | auth-server | `AUTH_ISSUER` | `https://auth.encurta.dor` (vai no `iss` dos tokens) |
+| auth-server | `SPRING_CONFIG_ADDITIONAL_LOCATION` | já vem `optional:file:/config/` na imagem: monte o arquivo de clientes do encurtador em `/config/application.yml` |
 | auth-server | `AUTH_SIGNING_KEY_ID`, `AUTH_SIGNING_KEY_FILE` | `auth-2`, `file:/run/secrets/auth-signing-key.pem` (PEM PKCS#8; sem ele, a chave é gerada na subida) |
 | auth-server | `AUTH_WEB_CLIENT_SECRET` | segredo do cliente `encurtador-web` (`openssl rand -base64 32`) |
 | auth-server | `AUTH_WEB_REDIRECT_URIS`, `AUTH_WEB_POST_LOGOUT_REDIRECT_URIS` | `https://painel.encurta.dor/login/oauth2/code/encurtador`, `https://painel.encurta.dor/` |
 | auth-server | `AUTH_PANEL_ORIGINS`, `AUTH_PANEL_DEFAULT_URL` | `https://painel.encurta.dor`, `https://painel.encurta.dor/` |
+| auth-server | `AUTH_CORS_ALLOWED_ORIGINS` | origens do Swagger UI que chamam `/oauth2/token` (`http://localhost:8080` no local) |
 | bff | `APP_BASE_URL` | `https://painel.encurta.dor` (endereço público do painel) |
 | bff | `BFF_API_URL` | `http://api:8080` (a API, pela rede interna) |
 | bff | `BFF_AUTH_PUBLIC_URL`, `BFF_AUTH_INTERNAL_URL` | `https://auth.encurta.dor` (o emissor, para onde o navegador vai), `http://auth-server:8090` |
@@ -498,7 +521,7 @@ A CLI não tem refresh token: depois de 15 minutos, ela confirma um código novo
 Sem sessão, `/api/**` e `/bff/**` respondem 401 em problem+json, nunca um redirecionamento; API fora ou lenta, 503
 `UPSTREAM_UNAVAILABLE`; refresh token recusado (por exemplo, depois de uma troca de senha), 401 `SESSION_EXPIRED`.
 
-**auth-server** (`apps/auth-server/`, porta 8090): credenciais, login e emissão de tokens
+**auth-server** (imagem `ghcr.io/alcibarros-dev/auth`, porta 8090): credenciais, login e emissão de tokens
 
 | Caminho | O que é |
 |---|---|
@@ -509,10 +532,10 @@ Sem sessão, `/api/**` e `/bff/**` respondem 401 em problem+json, nunca um redir
 | `/oauth2/authorize`, `/oauth2/token`, `/oauth2/device_authorization`, `/connect/logout`, `/userinfo` | Protocolo OAuth 2.1 e OpenID Connect; erros no formato do OAuth (`error`, `error_description`) |
 | `/oauth2/jwks`, `/.well-known/openid-configuration` | Chaves públicas e descoberta |
 
-Clientes registrados: `encurtador-cli` (público, fluxo de dispositivo), `encurtador-web` (o BFF do painel,
-confidencial, código com PKCE e refresh token) e, só no perfil `local`, `encurtador-dev` (público, código com PKCE,
-para o Swagger UI e o Postman). O access token leva `sub` (identificador estável da credencial), `aud`
-`encurtador-api`, `email` e `scope`.
+Clientes registrados, em [`infra/auth-server/application.yml`](infra/auth-server/application.yml): `encurtador-cli`
+(público, fluxo de dispositivo), `encurtador-web` (o BFF do painel, confidencial, código com PKCE e refresh token) e
+`encurtador-dev` (público, código com PKCE, para o Swagger UI e o Postman; só no ambiente local). O access token leva
+`sub` (identificador estável da credencial), `aud` `encurtador-api`, `email` e `scope`.
 
 **account** (`modules/account/`): sem rotas. Traduz o `sub` do token no id da conta, criando a conta no primeiro
 acesso; a API guarda só o `subject` e as datas.
@@ -583,12 +606,12 @@ Limites padrão (`app.rate-limit.*`):
 ./mvnw verify
 ```
 
-Só exige Docker: o Testcontainers sobe PostgreSQL, Redis, Kafka e Toxiproxy reais. O build roda os testes unitários
-de cada módulo, os de integração (na API, no redirect, no `auth-server` e no `bff`, porque sobem a aplicação
-inteira), o lint, os testes e o build do painel, a verificação de módulos do Spring Modulith e o gate de cobertura
-(JaCoCo, mínimo de 80% de linhas fora de configuração; hoje em torno de 97%). O gate e o relatório ficam no módulo
-`tools/coverage`, que junta a cobertura de todos: `tools/coverage/target/site/jacoco-aggregate/`. O painel tem gate
-próprio, de 80% de linhas no Vitest (`frontend/web/coverage/`).
+Só exige Docker: o Testcontainers sobe PostgreSQL, Redis, Kafka e Toxiproxy reais. O build roda os testes unitários de
+cada módulo, os de integração (na API, no redirect e no `bff`, porque sobem a aplicação inteira), o lint, os testes e o
+build do painel, a verificação de módulos do Spring Modulith e o gate de cobertura (JaCoCo, mínimo de 80% de linhas fora
+de configuração; hoje em torno de 97%). O gate e o relatório ficam no módulo `tools/coverage`, que junta a cobertura de
+todos: `tools/coverage/target/site/jacoco-aggregate/`. O painel tem gate próprio, de 80% de linhas no Vitest
+(`frontend/web/coverage/`).
 
 Para testar um módulo sozinho, com os módulos de que ele depende:
 
@@ -604,16 +627,16 @@ Além dos fluxos da API, os testes cobrem os cenários de falha do ADR:
 - o PostgreSQL recusa qualquer escrita pelo pool do redirect;
 - cota, alias e o primeiro acesso de um usuário novo disputados em paralelo têm um só vencedor;
 - com o `auth-server` fora, tokens de chaves já conhecidas continuam valendo; sem nenhuma chave, 503;
-- no `auth-server`: fluxos de código com PKCE e de dispositivo, cadastro, troca de senha, limites, rotação de chave e
-  claims emitidos;
 - mensagem envenenada vai para a DLT, e evento duplicado vira um único registro;
 - o rate limit responde 429 e libera as requisições com o Redis fora.
 
 Os testes da API não precisam do `auth-server`: um servidor HTTP de teste publica um JWKS com uma chave RSA de teste,
 e os tokens são assinados com ela, pelo mesmo caminho de produção. Os do redirect não precisam da API: o schema vem
 das migrações dela, lidas da pasta `apps/api`, e os links de teste são gravados direto no banco; a API, por sua vez,
-testa o consumidor publicando no tópico os cliques no formato que o redirect usa. Os do BFF trocam a API e o `auth-server` por
-servidores HTTP falsos (repasse, renovação e revogação de token, timeouts). A stack inteira é conferida sobre o compose
+testa o consumidor publicando no tópico os cliques no formato que o redirect usa. Os do BFF trocam a API e o
+`auth-server` por servidores HTTP falsos (repasse, renovação e revogação de token, timeouts). Os testes do próprio
+`auth-server` (fluxos de código com PKCE e de dispositivo, cadastro, troca de senha, limites, rotação de chave e
+claims) rodam no repositório dele. A stack inteira é conferida sobre o compose
 pelos testes de `e2e/`: o `e2e/cli/ponta-a-ponta.sh` e o Playwright em `e2e/playwright`, que o CI roda num job
 próprio.
 

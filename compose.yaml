@@ -1,8 +1,9 @@
 # Infraestrutura local (perfil "local"). Imagens fixadas por versão e portas presas a 127.0.0.1 (ADR-0001, D15).
 # O PostgreSQL usa a porta 5433 no host para não conflitar com outros bancos locais na 5432.
 #
-# As aplicações em container ("auth-server", "api", "redirect" e "bff") só sobem com o profile "app" do compose, o das
-# aplicações (ADR-0005, D2; ADR-0006, D1):
+# O servidor de autorização ("auth-server") vem pronto como imagem e sobe com a infraestrutura (ADR-0007). As
+# aplicações deste repositório ("api", "redirect" e "bff") só sobem com o profile "app" do compose, o das aplicações
+# (ADR-0005, D2; ADR-0006, D1):
 #   docker compose --profile app up --build
 # Sem o profile, o compose sobe só a infraestrutura, que é o que o perfil "local" do Spring Boot usa.
 services:
@@ -114,16 +115,11 @@ services:
       kafka:
         condition: service_started
 
-  # Servidor de autorização (ADR-0003, D11): login, cadastro, troca de senha e emissão dos tokens que a API valida.
+  # Servidor de autorização (ADR-0003; ADR-0007): login, cadastro, troca de senha e emissão dos tokens que a API
+  # valida. Vem pronto do repositório alcibarros-dev/auth, na versão fixada abaixo (AUTH_IMAGE_TAG troca a versão).
+  # Faz parte da infraestrutura, sem o profile "app": o spring-boot:run da API e do BFF o sobe junto com o banco.
   auth-server:
-    profiles: ["app"]
-    build:
-      context: .
-      args:
-        MODULE: apps/auth-server
-        HTTP_PORT: 8090
-        MANAGEMENT_PORT: 8091
-    image: encurtador-auth-server:local
+    image: ghcr.io/alcibarros-dev/auth:${AUTH_IMAGE_TAG:-0.1.0}
     # Usa a chave de .secrets/auth-signing-key.pem se ela existir (gere com o comando do README). Sem ela, a chave é
     # gerada na subida, com kid único, e os tokens emitidos deixam de valer quando o container reinicia. A imagem em
     # si só lê a chave de AUTH_SIGNING_KEY_FILE.
@@ -143,13 +139,12 @@ services:
       # URL pública: vai no "iss" dos tokens e é o endereço que o navegador e a CLI usam.
       AUTH_ISSUER: http://localhost:8090
       AUTH_SIGNING_KEY_ID: compose-1
-      # Cliente encurtador-web, do BFF do painel (ADR-0004, D4). SOMENTE local: fora daqui, defina no .env.
-      AUTH_WEB_CLIENT_SECRET: ${AUTH_WEB_CLIENT_SECRET:-compose-web-secret}
-      AUTH_WEB_REDIRECT_URIS: http://localhost:8070/login/oauth2/code/encurtador
-      AUTH_WEB_POST_LOGOUT_REDIRECT_URIS: http://localhost:8070/
-      AUTH_PANEL_ORIGINS: http://localhost:8070
-      AUTH_PANEL_DEFAULT_URL: http://localhost:8070/
+      # Cliente encurtador-web, do BFF do painel (ADR-0004, D4). SOMENTE local: fora daqui, defina no .env. É o mesmo
+      # segredo do perfil "local" do BFF, que também usa este servidor.
+      AUTH_WEB_CLIENT_SECRET: ${AUTH_WEB_CLIENT_SECRET:-dev-web-secret}
     volumes:
+      # Clientes OAuth, audiência e nome das páginas do encurtador (ADR-0007, D3).
+      - ./infra/auth-server/application.yml:/config/application.yml:ro
       # .secrets/ fica fora do Git e da imagem.
       - ./.secrets:/run/secrets/encurtador:ro
     ports:
@@ -172,6 +167,8 @@ services:
         MODULE: apps/api
         HTTP_PORT: 8080
         MANAGEMENT_PORT: 8081
+      # Token do GitHub Packages (ADR-0007, D7): GITHUB_ACTOR e GITHUB_TOKEN do ambiente
+      secrets: [github_actor, github_token]
     image: encurtador-api:local
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/encurtador
@@ -213,6 +210,8 @@ services:
         MODULE: apps/redirect
         HTTP_PORT: 8060
         MANAGEMENT_PORT: 8061
+      # Token do GitHub Packages (ADR-0007, D7): GITHUB_ACTOR e GITHUB_TOKEN do ambiente
+      secrets: [github_actor, github_token]
     image: encurtador-redirect:local
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/encurtador
@@ -244,6 +243,8 @@ services:
         MODULE: apps/bff
         HTTP_PORT: 8070
         MANAGEMENT_PORT: 8071
+      # Token do GitHub Packages (ADR-0007, D7): GITHUB_ACTOR e GITHUB_TOKEN do ambiente
+      secrets: [github_actor, github_token]
     image: encurtador-bff:local
     environment:
       SPRING_DATA_REDIS_HOST: redis
@@ -252,7 +253,7 @@ services:
       # O navegador vai ao auth-server por localhost:8090, que também é o "iss" dos tokens; o BFF, pela rede interna.
       BFF_AUTH_PUBLIC_URL: http://localhost:8090
       BFF_AUTH_INTERNAL_URL: http://auth-server:8090
-      BFF_CLIENT_SECRET: ${AUTH_WEB_CLIENT_SECRET:-compose-web-secret}
+      BFF_CLIENT_SECRET: ${AUTH_WEB_CLIENT_SECRET:-dev-web-secret}
       # Sem HTTPS no local: os cookies não podem ter o prefixo __Host- nem Secure.
       SERVER_SERVLET_SESSION_COOKIE_NAME: WEBSESSION
       SERVER_SERVLET_SESSION_COOKIE_SECURE: "false"
@@ -265,6 +266,13 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+
+# Só para o build das imagens: o Dockerfile os lê como secrets do BuildKit, fora das camadas.
+secrets:
+  github_actor:
+    environment: GITHUB_ACTOR
+  github_token:
+    environment: GITHUB_TOKEN
 
 volumes:
   postgres_data:

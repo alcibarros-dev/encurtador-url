@@ -23,7 +23,7 @@ logging:
       console: ""
 
 bff:
-  # SOMENTE para desenvolvimento local: o mesmo segredo do perfil local do auth-server.
+  # SOMENTE para desenvolvimento local: o mesmo segredo do auth-server do compose (ADR-0007).
   client-secret: dev-web-secret
   cookies:
     csrf-name: XSRF-TOKEN

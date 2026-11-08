@@ -20,7 +20,8 @@ springdoc:
   swagger-ui:
     enabled: true
     # Login no "Authorize" pelo fluxo de código com PKCE, com o cliente público encurtador-dev do auth-server
-    # (ADR-0003, D10). O auth-server libera CORS de /oauth2/token para http://localhost:8080 no perfil local.
+    # (ADR-0003, D10). O auth-server do compose libera CORS de /oauth2/token para http://localhost:8080
+    # (infra/auth-server/application.yml, ADR-0007).
     oauth:
       client-id: encurtador-dev
       use-pkce-with-authorization-code-grant: true

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Settings globais do Maven deste repositório, ligados pelo .mvn/maven.config (ADR-0007, D7). O ~/.m2/settings.xml
+    de cada um continua valendo por cima destes.
+
+    O servidor "github" baixa as bibliotecas de segurança do GitHub Packages (alcibarros-dev/auth), que exige token
+    até para pacotes públicos. Defina no ambiente, uma vez:
+      GITHUB_ACTOR  o seu usuário do GitHub
+      GITHUB_TOKEN  um token (classic) com o escopo read:packages
+    No GitHub Actions, as duas já existem. Depois do primeiro download, os jars ficam no ~/.m2 e o token só volta a ser
+    usado numa versão nova.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+    <servers>
+        <server>
+            <id>github</id>
+            <username>${env.GITHUB_ACTOR}</username>
+            <password>${env.GITHUB_TOKEN}</password>
+        </server>
+    </servers>
+    <mirrors>
+        <!-- O mesmo bloqueio de repositórios HTTP dos settings globais do Maven, que estes substituem -->
+        <mirror>
+            <id>maven-default-http-blocker</id>
+            <mirrorOf>external:http:*</mirrorOf>
+            <name>Bloqueia repositórios externos por HTTP</name>
+            <url>http://0.0.0.0/</url>
+            <blocked>true</blocked>
+        </mirror>
+    </mirrors>
+</settings>

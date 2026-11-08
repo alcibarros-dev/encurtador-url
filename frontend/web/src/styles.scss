@@ -4,8 +4,8 @@
 // Classe .cdk-visually-hidden, para textos só de leitor de tela.
 @include cdk.a11y-visually-hidden();
 
-// Tokens de cor e tipografia do painel, os mesmos das páginas do auth-server (ADR-0004, R4:
-// apps/auth-server/src/main/resources/static/css/painel.css). O tema segue a preferência do sistema.
+// Tokens de cor e tipografia do painel, os mesmos das páginas do auth-server (ADR-0004, R4: no repositório
+// alcibarros-dev/auth, src/main/resources/static/css/painel.css; ADR-0007). O tema segue a preferência do sistema.
 :root {
   --cor-fundo: #f6f7f9;
   --cor-superficie: #ffffff;

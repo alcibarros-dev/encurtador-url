@@ -1,7 +1,7 @@
 package br.com.encurtador.account.application;
 
 import br.com.encurtador.account.infra.AccountRepository;
-import br.com.encurtador.security.UnknownSubjectException;
+import dev.alcibarros.auth.security.UnknownSubjectException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;

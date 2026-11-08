@@ -25,7 +25,7 @@ A migração segue o padrão *expand and contract*. Até o passo 4, tudo é reve
 Suba o `auth-server` apontando para o mesmo PostgreSQL. A V1 dele cria o schema `auth`:
 
 ```bash
-docker compose --profile app up -d --build auth-server
+docker compose up -d auth-server
 ```
 
 Confira: `select count(*) from auth.credentials;` responde `0`.
@@ -37,7 +37,7 @@ lê `public.users` ou, se ela já tiver sido renomeada, `public.accounts`:
 
 ```bash
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U encurtador -d encurtador \
-  < apps/auth-server/scripts/importar-usuarios.sql
+  < infra/auth-server/importar-usuarios.sql
 ```
 
 Confira que todos os usuários vieram:

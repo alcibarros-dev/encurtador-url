@@ -34,14 +34,6 @@
         </dependency>
         <dependency>
             <groupId>br.com.encurtador</groupId>
-            <artifactId>encurtador-url-security-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>br.com.encurtador</groupId>
-            <artifactId>encurtador-url-security</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>br.com.encurtador</groupId>
             <artifactId>encurtador-url-account</artifactId>
         </dependency>
         <dependency>
@@ -67,10 +59,6 @@
         <dependency>
             <groupId>br.com.encurtador</groupId>
             <artifactId>encurtador-url-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>br.com.encurtador</groupId>
-            <artifactId>encurtador-url-auth-server</artifactId>
         </dependency>
         <dependency>
             <groupId>br.com.encurtador</groupId>

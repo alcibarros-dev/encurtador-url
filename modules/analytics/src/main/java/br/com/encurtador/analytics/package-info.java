@@ -4,7 +4,7 @@
  * evento {@link br.com.encurtador.clicks.LinkClicked}. É o dono dos tópicos e da DLT.
  */
 @ApplicationModule(displayName = "Analytics",
-        allowedDependencies = {"clicks", "link", "ratelimit", "security", "shared"})
+        allowedDependencies = {"clicks", "link", "ratelimit", "shared"})
 package br.com.encurtador.analytics;
 
 import org.springframework.modulith.ApplicationModule;

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-11-02), após a revisão 1 (§8) · **implementado** (A0 a A4, 2026-11-06; notas de implementação em §8) · D3, D4, D5, D9, D11, R10 e §5 ajustados pelo ADR-0004 · D2, D8, D11 e D12 ajustadas pelo ADR-0005 |
+| Status | **Aceito** (2026-11-02), após a revisão 1 (§8) · **implementado** (A0 a A4, 2026-11-06; notas de implementação em §8) · D3, D4, D5, D9, D11, R10 e §5 ajustados pelo ADR-0004 · D2, D8, D11 e D12 ajustadas pelo ADR-0005 · D2, D8, D11 e D12 ajustadas pelo ADR-0007 (repositório próprio) |
 | Data | 2026-11-02 |
 | Escopo | Tirar login, cadastro, senha e emissão de tokens do app; criar o `auth-server` (OAuth 2 / OpenID Connect) |
 | Substitui | ADR-0001 D9 (autenticação: emissão própria de JWT, login e refresh na API). Ajusta ADR-0001 D1, D6, D10, D11, D12, D13, D14, D15, RF02, R5 e R8, e ADR-0002 D1, D2, D4, D5, D7, D8 e D9 |
@@ -49,6 +49,10 @@ se precisar saber quem entrou; o access token é validado pelo app.
 ### D2 — `auth-server`: aplicação separada no mesmo repositório
 
 > **Ajustada pelo ADR-0005** (2026-11-06): o `auth-server` fica em `apps/auth-server`.
+>
+> **Ajustada pelo ADR-0007** (2026-11-08): o `auth-server` sai deste repositório para
+> [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth), com cópia do `shared` e do `ratelimit` que usa, e
+> chega ao encurtador como imagem. Os clientes e a audiência saem do código para `infra/auth-server/application.yml`.
 
 ```text
 auth-server/                       encurtador-url-auth-server → ratelimit, shared
@@ -239,6 +243,8 @@ O pacote `identity` do app é removido. No lugar dele entra o `modules/account` 
 
 > **Ajustada pelo ADR-0005** (2026-11-06): o script de importação fica em
 > `apps/auth-server/scripts/importar-usuarios.sql`.
+>
+> **Ajustada pelo ADR-0007** (2026-11-08, D6): o script fica em `infra/auth-server/importar-usuarios.sql`.
 
 O `auth-server` usa o schema `auth`, no mesmo PostgreSQL, com histórico Flyway próprio e, fora do ambiente local,
 usuário de banco próprio sem acesso ao schema do app.
@@ -317,6 +323,10 @@ Os refresh tokens atuais são descartados: na virada, todos fazem login de novo.
 >
 > **Ajustada pelo ADR-0005** (2026-11-06): o serviço `app` do compose vira `api`, e a imagem da API, `encurtador-api`;
 > caminhos novos no CI.
+>
+> **Ajustada pelo ADR-0007** (2026-11-08, D4 e D5): o serviço `auth-server` usa a imagem
+> `ghcr.io/alcibarros-dev/auth`, com versão fixada, e sobe com a infraestrutura, sem o profile `app`. O CI daqui não
+> constrói mais a imagem dele, e as Run Configurations dele saem.
 
 - **Compose:** serviço `auth-server` no profile `app`, ao lado do `app`, nas portas `127.0.0.1:8090` e
   `127.0.0.1:8091`. O `app` recebe `APP_JWT_ISSUER` e `APP_JWT_JWK_SET_URI`; o `APP_JWT_SECRET` deixa de existir. O
@@ -329,6 +339,9 @@ Os refresh tokens atuais são descartados: na virada, todos fazem login de novo.
 ### D12 — Testes
 
 > **Ajustada pelo ADR-0005** (2026-11-06): o teste ponta a ponta da CLI fica em `e2e/cli/ponta-a-ponta.sh`.
+>
+> **Ajustada pelo ADR-0007** (2026-11-08): os testes do `auth-server` rodam no repositório dele; aqui, ele é coberto
+> pelos testes de ponta a ponta, com a imagem publicada.
 
 - **App:** os testes deixam de cadastrar e logar pela API. Um servidor HTTP de teste publica um JWKS com uma chave RSA
   de teste, e `TestTokens` assina com ela. Assim os testes usam o mesmo caminho de produção (busca do JWKS, cache,

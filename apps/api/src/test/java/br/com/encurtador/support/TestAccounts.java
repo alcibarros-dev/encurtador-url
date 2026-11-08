@@ -1,7 +1,7 @@
 package br.com.encurtador.support;
 
-import br.com.encurtador.security.UserIdResolver;
 
+import dev.alcibarros.auth.security.UserIdResolver;
 import java.util.Map;
 import java.util.UUID;
 

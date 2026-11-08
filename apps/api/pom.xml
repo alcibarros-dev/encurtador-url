@@ -30,12 +30,12 @@
             <artifactId>encurtador-url-ratelimit</artifactId>
         </dependency>
         <dependency>
-            <groupId>br.com.encurtador</groupId>
-            <artifactId>encurtador-url-security-api</artifactId>
+            <groupId>dev.alcibarros</groupId>
+            <artifactId>auth-security-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>br.com.encurtador</groupId>
-            <artifactId>encurtador-url-security</artifactId>
+            <groupId>dev.alcibarros</groupId>
+            <artifactId>auth-security</artifactId>
         </dependency>
         <dependency>
             <groupId>br.com.encurtador</groupId>

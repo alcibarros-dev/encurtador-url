@@ -1,0 +1,58 @@
+# Configuração do encurtador para o servidor de autorização (ADR-0007): a imagem ghcr.io/alcibarros-dev/auth lê este
+# arquivo de /config/application.yml. Aqui ficam os clientes OAuth, a audiência dos tokens e o nome das páginas; os
+# endereços e segredos vêm de variáveis de ambiente, com os valores do compose local como padrão.
+spring:
+  security:
+    oauth2:
+      authorizationserver:
+        client:
+          # Terminal e curl: fluxo de dispositivo, com confirmação de cada código e sem refresh token (ADR-0003, D3).
+          encurtador-cli:
+            registration:
+              client-id: encurtador-cli
+              client-authentication-methods: none
+              authorization-grant-types: urn:ietf:params:oauth:grant-type:device_code
+              # O SAS não aceita openid no fluxo de dispositivo, que não emite id_token.
+              scopes: email
+            require-authorization-consent: true
+            token:
+              access-token-time-to-live: 15m
+          # BFF do painel (ADR-0004, D4): confidencial, PKCE e refresh token sem rotação por 30 dias. O 4200 é o
+          # ng serve do painel.
+          encurtador-web:
+            registration:
+              client-id: encurtador-web
+              client-secret: "{noop}${AUTH_WEB_CLIENT_SECRET}"
+              client-authentication-methods: client_secret_basic
+              authorization-grant-types: authorization_code,refresh_token
+              redirect-uris: ${AUTH_WEB_REDIRECT_URIS:http://localhost:8070/login/oauth2/code/encurtador,http://localhost:4200/login/oauth2/code/encurtador}
+              post-logout-redirect-uris: ${AUTH_WEB_POST_LOGOUT_REDIRECT_URIS:http://localhost:8070/,http://localhost:4200/}
+              scopes: openid,email
+            require-proof-key: true
+            token:
+              access-token-time-to-live: 15m
+              refresh-token-time-to-live: 30d
+              reuse-refresh-tokens: true
+          # Postman e Swagger UI da API (ADR-0003, D3): só para o ambiente local. Em produção, monte um arquivo sem
+          # este cliente e com os endereços públicos.
+          encurtador-dev:
+            registration:
+              client-id: encurtador-dev
+              client-authentication-methods: none
+              authorization-grant-types: authorization_code
+              redirect-uris: https://oauth.pstmn.io/v1/callback,http://localhost:8080/swagger-ui/oauth2-redirect.html
+              scopes: openid,email
+            require-proof-key: true
+            token:
+              access-token-time-to-live: 15m
+
+app:
+  auth:
+    display-name: Encurtador
+    # O "aud" que a API exige (app.jwt.audience).
+    audience: encurtador-api
+    panel-origins: ${AUTH_PANEL_ORIGINS:http://localhost:8070,http://localhost:4200}
+    panel-default-url: ${AUTH_PANEL_DEFAULT_URL:http://localhost:8070/}
+  # O Swagger UI da API chama /oauth2/token de outra origem.
+  cors:
+    allowed-origins: ${AUTH_CORS_ALLOWED_ORIGINS:http://localhost:8080}

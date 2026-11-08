@@ -11,7 +11,7 @@
     </parent>
 
     <!-- Serviço de redirecionamento GET|HEAD /{code}, que escala sem a API (ADR-0006). Aplicação e código num lugar
-         só, como o auth-server: nenhuma outra aplicação usa o redirecionamento -->
+         só: nenhuma outra aplicação usa o redirecionamento -->
     <artifactId>encurtador-url-redirect</artifactId>
     <name>encurtador-url-redirect</name>
 

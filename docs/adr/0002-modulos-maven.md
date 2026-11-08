@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-11-02), após a revisão 1 (§8) · implementado (M0 a M4, 2026-11-02; notas no §8) · D1, D2, D4, D5, D7, D8 e D9 ajustadas pelo ADR-0003 · D1, D2, D7 e D9 ajustadas pelo ADR-0004 · D1, D2, D7, D8 e D9 ajustadas pelo ADR-0005 · D1, D2 e D9 ajustadas pelo ADR-0006 |
+| Status | **Aceito** (2026-11-02), após a revisão 1 (§8) · implementado (M0 a M4, 2026-11-02; notas no §8) · D1, D2, D4, D5, D7, D8 e D9 ajustadas pelo ADR-0003 · D1, D2, D7 e D9 ajustadas pelo ADR-0004 · D1, D2, D7, D8 e D9 ajustadas pelo ADR-0005 · D1, D2 e D9 ajustadas pelo ADR-0006 · D3 e D4 ajustadas pelo ADR-0007 |
 | Data | 2026-11-02 |
 | Escopo | Divisão do build em módulos Maven, separação entre plataforma e negócio, contratos de segurança |
 | Substitui | ADR-0001 D2 (estrutura física e regras de dependência). Ajusta ADR-0001 D9, D11, D14 e D15 |
@@ -133,6 +133,10 @@ Regras:
 
 ### D3 — Contratos de segurança (`security-api`)
 
+> **Ajustada pelo ADR-0007** (2026-11-08, D7): o `security-api` sai de `platform/` e vira o `auth-security-api` do
+> repositório [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth), no pacote `dev.alcibarros.auth.security`,
+> baixado do GitHub Packages. O conteúdo não muda.
+
 O `security-api` não tem dependências de framework. Contém:
 
 | Tipo | Papel | Quem implementa ou usa |
@@ -152,6 +156,10 @@ Consequências diretas:
   próprio Javadoc registra que não há SSRF a evitar, porque o servidor nunca acessa o destino.
 
 ### D4 — Fronteira do `security`
+
+> **Ajustada pelo ADR-0007** (2026-11-08, D7): o `security` sai de `platform/` e vira o `auth-security` do repositório
+> `auth`, com as respostas de erro do `auth-support` (tipo `urn:auth:problem:<código>`, mesmos códigos). Para o Spring
+> Modulith, é uma biblioteca externa e sai dos `allowedDependencies`.
 
 > **Ajustada pelo ADR-0003** (D6): a validação do token passa a ser só por JWKS.
 

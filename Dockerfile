@@ -2,7 +2,7 @@
 # Imagem de uma aplicação do repositório (ADR-0001, D15; ADR-0002, D9; ADR-0005, D7): build com o Maven Wrapper,
 # runtime só com a JRE e usuário sem privilégios. MODULE é o caminho do módulo da aplicação.
 # Uso: docker build -t encurtador-api .                                 (MODULE=apps/api, o padrão)
-#      docker build --build-arg MODULE=<caminho do módulo> -t <imagem> .   (apps/redirect, apps/auth-server, apps/bff)
+#      docker build --build-arg MODULE=<caminho do módulo> -t <imagem> .   (apps/redirect, apps/bff)
 
 FROM eclipse-temurin:25.0.5_8-jdk-noble AS build
 ARG MODULE=apps/api
@@ -18,7 +18,13 @@ RUN apt-get update \
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 COPY --parents */*/pom.xml ./
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q dependency:go-offline
+# As bibliotecas de segurança vêm do GitHub Packages, que exige token (ADR-0007, D7): GITHUB_ACTOR e GITHUB_TOKEN
+# chegam como secrets do BuildKit, só durante o RUN, e não ficam em nenhuma camada da imagem.
+#   docker build --secret id=github_actor,env=GITHUB_ACTOR --secret id=github_token,env=GITHUB_TOKEN ...
+RUN --mount=type=cache,target=/root/.m2 \
+    --mount=type=secret,id=github_actor,env=GITHUB_ACTOR \
+    --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
+    ./mvnw -B -q dependency:go-offline
 
 # Os testes precisam de Docker (Testcontainers) e rodam no CI com ./mvnw verify, não dentro do build da imagem.
 # O painel (frontend/web) vai inteiro: package.json, lock, angular.json, tsconfig, ESLint e public/, além do src/
@@ -26,6 +32,8 @@ RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q dependency:go-offline
 COPY --parents */*/src ./
 COPY frontend/web/ frontend/web/
 RUN --mount=type=cache,target=/root/.m2 --mount=type=cache,target=/root/.npm \
+    --mount=type=secret,id=github_actor,env=GITHUB_ACTOR \
+    --mount=type=secret,id=github_token,env=GITHUB_TOKEN \
     ./mvnw -B -q package -DskipTests -pl ${MODULE} -am \
     && cp ${MODULE}/target/*-exec.jar application.jar \
     && java -Djarmode=tools -jar application.jar extract --layers --destination extracted
@@ -51,7 +59,7 @@ COPY --from=build /build/extracted/application/ ./
 
 USER app:app
 # Na API, 8080: rotas da API; 8081: actuator completo, só para a rede interna (D13). No redirect, 8060 e 8061
-# (ADR-0006, D1); no auth-server, 8090 e 8091; no BFF, 8070 e 8071.
+# (ADR-0006, D1); no BFF, 8070 e 8071.
 EXPOSE ${HTTP_PORT} ${MANAGEMENT_PORT}
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError" \
     HEALTHCHECK_PORT=${HTTP_PORT}

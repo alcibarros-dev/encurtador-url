@@ -16,8 +16,8 @@
 
     <dependencies>
         <dependency>
-            <groupId>br.com.encurtador</groupId>
-            <artifactId>encurtador-url-security-api</artifactId>
+            <groupId>dev.alcibarros</groupId>
+            <artifactId>auth-security-api</artifactId>
         </dependency>
         <dependency>
             <groupId>br.com.encurtador</groupId>

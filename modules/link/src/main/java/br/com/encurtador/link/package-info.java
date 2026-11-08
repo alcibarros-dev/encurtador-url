@@ -7,7 +7,7 @@
  * tombstone reage ao evento. A tabela {@code links} também é lida, só para leitura, pelo serviço de redirecionamento
  * (ADR-0006, D2): as colunas que ele usa só mudam com migração compatível com os dois.
  */
-@ApplicationModule(displayName = "Link", allowedDependencies = {"security", "ratelimit", "shared"})
+@ApplicationModule(displayName = "Link", allowedDependencies = {"ratelimit", "shared"})
 package br.com.encurtador.link;
 
 import org.springframework.modulith.ApplicationModule;
