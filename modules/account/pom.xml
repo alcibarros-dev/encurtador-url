@@ -16,7 +16,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>dev.alcibarros</groupId>
+            <groupId>br.com.authcore</groupId>
             <artifactId>auth-security-api</artifactId>
         </dependency>
         <dependency>

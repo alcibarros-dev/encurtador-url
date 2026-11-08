@@ -4,7 +4,7 @@
 |---|---|
 | Status | **Aceito** (2026-11-08) · **implementado** (2026-11-08; notas no §7) |
 | Data | 2026-11-08 |
-| Escopo | O `auth-server` sai deste repositório para [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth) e chega ao encurtador como imagem Docker. O contrato com a API, o BFF e a CLI (emissor, JWKS, clientes, claims, páginas) não muda |
+| Escopo | O `auth-server` sai deste repositório para [auth](https://github.com/alcibarros-dev/auth) e chega ao encurtador como imagem Docker. O contrato com a API, o BFF e a CLI (emissor, JWKS, clientes, claims, páginas) não muda |
 | Ajusta | ADR-0002 D3 e D4; ADR-0003 D2, D8, D11 e D12; ADR-0005 D1 |
 | Decisores | Dono do projeto (repositório separado e referência por imagem no compose, decididos em 2026-11-08) · autor da proposta |
 
@@ -29,11 +29,11 @@ O `auth-server` já é uma aplicação separada (ADR-0003, D2): a API e o BFF fa
 
 ## 2. Decisões
 
-### D1 — Repositório `alcibarros-dev/auth`, sem histórico reescrito
+### D1 — Repositório `auth`, sem histórico reescrito
 
-O código vai para um repositório próprio, multi-módulo (`dev.alcibarros:auth-parent`, filho do
+O código vai para um repositório próprio, multi-módulo (`br.com.authcore:auth-parent`, filho do
 `spring-boot-starter-parent`), com o próprio `verify` e o mínimo de 80% de linhas somadas todas, num módulo `coverage`
-como o `tools/coverage` daqui. O servidor fica no módulo `server` (`auth-server`, pacote `dev.alcibarros.auth.server`);
+como o `tools/coverage` daqui. O servidor fica no módulo `server` (`auth-server`, pacote `br.com.authcore.server`);
 os outros módulos estão no D7. O `auth-server` tinha só dois commits aqui (`95cb8c2` e `967c85b`); o repositório novo
 começa num commit só, que os cita, em vez de reescrever o histórico.
 
@@ -65,7 +65,7 @@ do compose local como padrão.
 
 O CI do repositório novo testa e publica a imagem no GitHub Container Registry, para `linux/amd64` e `linux/arm64`:
 `:main` e `:sha-<commit>` a cada push na `main`, e `:X.Y.Z`, `:X.Y` e `:latest` a cada tag `vX.Y.Z`. O `compose.yaml`
-do encurtador fixa a versão (`ghcr.io/alcibarros-dev/auth:${AUTH_IMAGE_TAG:-0.1.0}`); subir de versão é mudar esse
+do encurtador fixa a versão (`ghcr.io/alcibarros-dev/auth:${AUTH_IMAGE_TAG:-0.2.0}`); subir de versão é mudar esse
 número, de propósito. O repositório e a imagem são públicos: o compose e o CI baixam sem login, e o `ghcr.io` não
 cobra imagens públicas.
 
@@ -91,7 +91,7 @@ lá. O teste dele (`ImportScriptTest`) precisava do schema `auth` do servidor e 
 > negócio só com regra de negócio.
 
 Os dois módulos validam os tokens que o servidor emite, do lado da API (resource server), e passam a ser bibliotecas
-do repositório `auth`, no pacote `dev.alcibarros.auth.security`:
+do repositório `auth`, no pacote `br.com.authcore.security`:
 
 | Módulo do `auth` | Artefato | Era aqui |
 |---|---|---|
@@ -109,9 +109,9 @@ do Java 25) e do Maven Central (conta, namespace e assinatura GPG):
 
 - O CI do `auth` publica o `auth-parent`, o `auth-support`, o `auth-security-api` e o `auth-security` a cada tag
   `vX.Y.Z`, com a versão da tag; o `auth-server` e o `auth-coverage` não são publicados.
-- O encurtador apaga `platform/security` e `platform/security-api` e depende de `dev.alcibarros:auth-security` e
+- O encurtador apaga `platform/security` e `platform/security-api` e depende de `br.com.authcore:auth-security` e
   `auth-security-api` na versão `auth.version` do `pom.xml` da raiz, a mesma da imagem do `auth-server`. Os imports
-  passam de `br.com.encurtador.security` para `dev.alcibarros.auth.security`, e o `security` sai dos
+  passam de `br.com.encurtador.security` para `br.com.authcore.security`, e o `security` sai dos
   `allowedDependencies`: para o Spring Modulith, que só olha `br.com.encurtador`, é uma biblioteca externa.
 - O GitHub Packages exige token até para pacotes públicos. O `.mvn/maven.config` liga o `.mvn/github-settings.xml`,
   que lê `GITHUB_ACTOR` e `GITHUB_TOKEN` do ambiente: o mesmo arquivo na máquina de cada um, no CI (o `GITHUB_TOKEN`
@@ -141,7 +141,7 @@ do Java 25) e do Maven Central (conta, namespace e assinatura GPG):
 ## 5. Critérios de pronto
 
 1. O repositório `auth` passa no `./mvnw verify` sozinho, com o mínimo de cobertura.
-2. A imagem `ghcr.io/alcibarros-dev/auth:0.1.0` sobe com o arquivo do encurtador e responde no emissor de antes.
+2. A imagem `ghcr.io/alcibarros-dev/auth:0.2.0` sobe com o arquivo do encurtador e responde no emissor de antes.
 3. Neste repositório, nenhum módulo, imagem, Run Configuration ou passo de CI constrói o servidor.
 4. `./mvnw clean verify`, a stack do compose e os dois testes de ponta a ponta passam com a imagem.
 
@@ -163,5 +163,11 @@ do Java 25) e do Maven Central (conta, namespace e assinatura GPG):
 - **Primeira publicação:** push do repositório `auth`, tag `v0.1.0` (`git tag v0.1.0 && git push origin v0.1.0`),
   conferir que a imagem `auth` ficou pública, dar ao `encurtador-url` acesso de leitura aos pacotes Maven e só então
   o push do encurtador, cujo CI baixa a imagem e os jars.
+- **0.2.0, sem nome pessoal nos artefatos** (2026-11-08, a pedido do dono do projeto): o `groupId` e os pacotes Java
+  passam do namespace anterior, com o nome do dono, para `br.com.authcore` (`br.com.authcore.server`,
+  `br.com.authcore.security`, `br.com.authcore.support`); os artefatos mantêm os nomes. O dono do GitHub continua só nos
+  endereços que o GitHub exige (`github.com/<dono>/auth`, `ghcr.io/<dono>/auth`, `maven.pkg.github.com/<dono>/auth`):
+  tirá-lo daí exigiria uma organização, e o dono do projeto preferiu manter a conta pessoal. O encurtador passa para a
+  0.2.0, na imagem e nas bibliotecas.
 - Antes da primeira publicação, os jars `0.1.0` foram instalados no `~/.m2` a partir de uma cópia do `auth` com a
   versão trocada, e a imagem foi construída localmente com a tag que o compose usa.

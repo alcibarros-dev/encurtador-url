@@ -751,7 +751,7 @@
     <span class="brand-sub">Topologia</span>
   </div>
   <div class="masthead-right">
-    <span class="masthead-meta">stack do compose · 2026-11-07</span>
+    <span class="masthead-meta">stack do compose · 2026-11-08</span>
     <button class="icon-btn" id="theme-toggle" aria-label="Alternar entre tema claro e escuro"></button>
   </div>
 </header>
@@ -782,6 +782,8 @@
     <a class="nav-doc" href="adr/0004-frontend-angular.md">ADR-0004 · frontend e BFF</a>
     <a class="nav-doc" href="adr/0005-organizacao-do-repositorio.md">ADR-0005 · pastas</a>
     <a class="nav-doc" href="adr/0006-servico-de-redirecionamento.md">ADR-0006 · redirect</a>
+    <a class="nav-doc" href="adr/0007-servidor-de-autorizacao-em-repositorio-proprio.md">ADR-0007 · repositório auth</a>
+    <a class="nav-doc" href="https://github.com/alcibarros-dev/auth">Repositório auth</a>
     <a class="nav-doc" href="runbooks/migracao-auth-server.md">Roteiro de migração</a>
   </nav>
   <div class="nav-backdrop" id="nav-backdrop"></div>
@@ -856,8 +858,8 @@
   'use strict';
 
   /* ------------------------------------------------------------------------------------------------------------------
-   * Dados. Tudo vem do repositório (compose.yaml, poms, application.yml, README e ADRs 0001 a 0006), no estado de
-   * 2026-11-07. Nenhum número de tráfego é medido: a animação só mostra o papel de cada caminho.
+   * Dados. Tudo vem do repositório (compose.yaml, poms, application.yml, README e ADRs 0001 a 0007), no estado de
+   * 2026-11-08. Nenhum número de tráfego é medido: a animação só mostra o papel de cada caminho.
    * ---------------------------------------------------------------------------------------------------------------- */
 
   const ADRS = {
@@ -867,6 +869,7 @@
     '0004': ['ADR-0004', 'adr/0004-frontend-angular.md'],
     '0005': ['ADR-0005', 'adr/0005-organizacao-do-repositorio.md'],
     '0006': ['ADR-0006', 'adr/0006-servico-de-redirecionamento.md'],
+    '0007': ['ADR-0007', 'adr/0007-servidor-de-autorizacao-em-repositorio-proprio.md'],
   };
 
   const TRAFEGO = {
@@ -988,19 +991,20 @@
       },
       {
         id: 'auth-server', label: 'auth-server', sub: ':8090', kind: 'app', group: 'apps', x: 560, y: 90,
-        badges: ['ratelimit', 'disjuntor'], addr: 'http://localhost:8090', image: 'encurtador-auth-server:local',
+        badges: ['ratelimit', 'disjuntor'], addr: 'http://localhost:8090', image: 'ghcr.io/alcibarros-dev/auth:0.2.0',
         info: {
-          resumo: 'Servidor de autorização (Spring Authorization Server): credenciais, login, cadastro, troca de senha e emissão dos access tokens RS256.',
+          resumo: 'Servidor de autorização (Spring Authorization Server): credenciais, login, cadastro, troca de senha e emissão dos access tokens RS256. Vem pronto do repositório auth, como imagem, e sobe com a infraestrutura.',
           campos: [
-            ['Pasta', '`apps/auth-server`'],
+            ['Código', '[auth](https://github.com/alcibarros-dev/auth), módulo `server`'],
             ['Portas', '8090 · actuator na 8091'],
-            ['Imagem', '`encurtador-auth-server:local`, construída do Dockerfile'],
-            ['Clientes', '`encurtador-cli`, `encurtador-web` e, só no perfil local, `encurtador-dev`'],
+            ['Imagem', '[`ghcr.io/alcibarros-dev/auth:0.2.0`](https://github.com/users/alcibarros-dev/packages/container/package/auth), publicada pelo CI do repositório auth; `AUTH_IMAGE_TAG` troca a versão'],
+            ['Configuração', '`infra/auth-server/application.yml`, montado em `/config/application.yml`'],
+            ['Clientes', '`encurtador-cli`, `encurtador-web` e `encurtador-dev`'],
             ['Access token', 'JWT RS256 de 15 min, com `aud` `encurtador-api` e `kid`'],
             ['Sessão', '`AUTHSESSION`, em memória'],
             ['Banco', 'schema `auth`: `credentials` e `oauth2_authorization`'],
             ['Readiness', 'aplicação e PostgreSQL'],
-            ['Testes', '49'],
+            ['Testes', '91, no repositório auth'],
           ],
           acesso: [
             ['Login', '[http://localhost:8090/login](http://localhost:8090/login)'],
@@ -1010,7 +1014,7 @@
             ['Health', '[http://localhost:8091/actuator/health](http://localhost:8091/actuator/health)'],
             ['Logs', '`docker compose logs -f auth-server`'],
           ],
-          adrs: ['0003'],
+          adrs: ['0003', '0007'],
         },
       },
       {
@@ -1025,7 +1029,7 @@
             ['Token', 'RS256 pelo JWKS; `iss` `http://localhost:8090`, `aud` `encurtador-api`; `typ` ausente (o do auth-server), JWT ou at+jwt'],
             ['Banco', 'schema `public`, migrações Flyway V1 a V5'],
             ['Readiness', 'aplicação e PostgreSQL; Redis e Kafka ficam de fora de propósito'],
-            ['Testes', '82, de integração e a verificação do Spring Modulith; os módulos que ela junta têm mais 265'],
+            ['Testes', '82, de integração e a verificação do Spring Modulith; os módulos que ela junta têm mais 241, e as bibliotecas de segurança, 24 no repositório auth'],
           ],
           acesso: [
             ['API', '`http://localhost:8080/api/v1`, com `Authorization: Bearer`'],
@@ -1399,6 +1403,7 @@
       { id: 'modules', label: 'modules/', tag: 'negócio' },
       { id: 'frontend', label: 'frontend/', tag: 'SPA Angular' },
       { id: 'platform', label: 'platform/', tag: 'técnico' },
+      { id: 'auth', label: 'auth', tag: 'repositório externo' },
     ],
     nodes: [
       mod('coverage', 'coverage', 'tools/coverage', 'build', 'tools', 110, 100, 'encurtador-url-coverage',
@@ -1408,12 +1413,10 @@
         'Raiz de composição: EncurtadorApplication, configuração, migrações Flyway e testes de integração. Só ela depende das implementações dos módulos; o pacote app junta os que não se conhecem, como o LinkCacheInvalidator.',
         '82', ['0002', '0005', '0006']),
       mod('redirect', 'redirect', 'apps/redirect', 'app', 'apps', 380, 100, 'encurtador-url-redirect',
-        'GET /{code}, com o código dentro da aplicação, como no auth-server: nenhuma outra o usa. Depende só dos contratos link-cache e clicks e da plataforma, sem Spring Security nem JPA.',
+        'GET /{code}, com o código dentro da aplicação: nenhuma outra o usa. Depende só dos contratos link-cache e clicks e da plataforma, sem Spring Security nem JPA.',
         '38', ['0006']),
-      mod('auth-server', 'auth-server', 'apps/auth-server', 'app', 'apps', 840, 100, 'encurtador-url-auth-server',
-        'Aplicação separada: não depende do security nem dos módulos de negócio.', '49', ['0003']),
       mod('bff', 'bff', 'apps/bff', 'app', 'apps', 1060, 100, 'encurtador-url-bff',
-        'Não depende do security, dos módulos de negócio nem da API: fala com ela só por HTTP.', '46', ['0004']),
+        'Não depende da segurança das APIs, dos módulos de negócio nem da API: fala com ela só por HTTP.', '46', ['0004']),
       mod('analytics', 'analytics', 'modules/analytics', 'negocio', 'modules', 450, 360, 'encurtador-url-analytics',
         'Kafka → consumidor idempotente → estatísticas. Cria os tópicos; quem publica os cliques é o redirect.', '— (cobertos pelos testes da API)', ['0001', '0002', '0006']),
       mod('clicks', 'clicks', 'modules/clicks', 'negocio', 'modules', 640, 360, 'encurtador-url-clicks',
@@ -1427,31 +1430,35 @@
       mod('web', 'web', 'frontend/web', 'frontend', 'frontend', 1060, 360, 'encurtador-url-web',
         'Angular 22 empacotado como jar: o build gera os estáticos em META-INF/resources. O ./mvnw verify instala o Node 26.13.0 e roda npm ci, lint, testes (gate de 80% de linhas no Vitest) e build.',
         '74 no Vitest', ['0004', '0005']),
-      mod('security', 'security', 'platform/security', 'plataforma', 'platform', 250, 620, 'encurtador-url-security',
-        'Validação do token pelo JWKS, cadeia de filtros e as respostas 401, 403 e 503.', '24', ['0002', '0003']),
-      mod('security-api', 'security-api', 'platform/security-api', 'plataforma', 'platform', 480, 620, 'encurtador-url-security-api',
-        'Contratos sem framework: @CurrentUser, UserIdResolver e PublicRoutes.', '— (só contratos)', ['0002']),
-      mod('ratelimit', 'ratelimit', 'platform/ratelimit', 'plataforma', 'platform', 710, 620, 'encurtador-url-ratelimit',
+      mod('ratelimit', 'ratelimit', 'platform/ratelimit', 'plataforma', 'platform', 830, 620, 'encurtador-url-ratelimit',
         'Janela fixa no Redis (Lua) e o filtro que aplica as regras de cada módulo.', '28', ['0001', '0002']),
-      mod('shared', 'shared', 'platform/shared', 'plataforma', 'platform', 940, 620, 'encurtador-url-shared',
+      mod('shared', 'shared', 'platform/shared', 'plataforma', 'platform', 1060, 620, 'encurtador-url-shared',
         'Erros RFC 9457, tempo, UUIDv7 e o disjuntor do Redis.', '32', ['0002']),
+      mod('security', 'auth-security', 'auth/security', 'externo', 'auth', 260, 620, 'br.com.authcore:auth-security',
+        'Validação do token pelo JWKS, cadeia de filtros e as respostas 401, 403 e 503. Biblioteca do repositório auth, baixada do GitHub Packages na versão auth.version do pom da raiz.', '24, no repositório auth', ['0002', '0003', '0007']),
+      mod('security-api', 'auth-security-api', 'auth/security-api', 'externo', 'auth', 480, 620, 'br.com.authcore:auth-security-api',
+        'Contratos sem framework: @CurrentUser, UserIdResolver, PublicRoutes e OpenApiSecurity. Biblioteca do repositório auth, baixada do GitHub Packages.', '— (só contratos)', ['0002', '0007']),
+      mod('support', 'auth-support', 'auth/support', 'externo', 'auth', 370, 820, 'br.com.authcore:auth-support',
+        'Respostas de erro problem+json do auth-security, com o tipo urn:auth:problem:<código>, e um Clock UTC quando a aplicação não tem um.', '2, no repositório auth', ['0007']),
+      mod('auth-server', 'auth-server', 'auth/server', 'app', 'auth', 600, 820, 'ghcr.io/alcibarros-dev/auth',
+        'O servidor de autorização. Não é dependência Maven de nada daqui: roda como imagem no compose, e a API só fala com ele por HTTP (o JWKS).', '91, no repositório auth', ['0003', '0007']),
     ],
     edges: [
       ['api', 'analytics', 0], ['api', 'link', 0], ['api', 'account', 0], ['api', 'link-cache', 0],
       ['api', 'security', 35], ['api', 'security-api', 0], ['api', 'ratelimit', -30], ['api', 'shared', 35],
-      ['auth-server', 'ratelimit', 0], ['auth-server', 'shared', 0],
+      ['auth-server', 'support', 0],
       ['bff', 'web', 0, 'empacota'], ['bff', 'ratelimit', -35], ['bff', 'shared', 0],
       ['redirect', 'link-cache', 0], ['redirect', 'clicks', 0], ['redirect', 'ratelimit', 5], ['redirect', 'shared', -35],
       ['link-cache', 'shared', 30],
       ['analytics', 'clicks', 0], ['analytics', 'link', -35], ['analytics', 'security-api', 0], ['analytics', 'ratelimit', 0], ['analytics', 'shared', 0],
       ['link', 'security-api', 0], ['link', 'ratelimit', 0], ['link', 'shared', 0],
       ['account', 'security-api', 0],
-      ['security', 'security-api', 0], ['security', 'shared', -45],
+      ['security', 'security-api', 0], ['security', 'support', 0],
       ['ratelimit', 'shared', 0],
       // tools/coverage agrega todos; curvas calculadas para não atravessar os nós (só a de shared cruza um).
       ...Object.entries({
-        shared: 0, ratelimit: -75, 'security-api': -20, security: 10, account: 0, link: 0, analytics: 0, clicks: 0,
-        'link-cache': 0, redirect: 0, api: -40, 'auth-server': -45, bff: -55,
+        shared: 0, ratelimit: -75, account: 0, link: 0, analytics: 0, clicks: 0,
+        'link-cache': 0, redirect: 0, api: -40, bff: -55,
       }).map(([to, curve]) => ['coverage', to, curve, 'agrega']),
     ].map(([from, to, curve = 0, kind = 'compila']) => ({ from, to, curve, kind, optional: kind === 'agrega' ? 'coverage' : undefined })),
     paths: [],
@@ -1459,9 +1466,9 @@
 
   /* Quais módulos Maven cada aplicação roda (as dependências dos poms, ADR-0002). */
   const SVC_MODS = {
-    api: ['api', 'analytics', 'link', 'account', 'link-cache', 'clicks', 'security', 'security-api', 'ratelimit', 'shared'],
+    api: ['api', 'analytics', 'link', 'account', 'link-cache', 'clicks', 'security', 'security-api', 'support', 'ratelimit', 'shared'],
     redirect: ['redirect', 'link-cache', 'clicks', 'ratelimit', 'shared'],
-    'auth-server': ['auth-server', 'ratelimit', 'shared'],
+    'auth-server': ['auth-server', 'support'],
     bff: ['bff', 'web', 'ratelimit', 'shared'],
     frontend: ['web'],
   };
@@ -2094,6 +2101,8 @@
     ['ext', 'recursos', 'banco, Redis, Kafka, HTTP'],
   ];
   const J = (dir, pkg) => `${dir}/src/main/java/br/com/encurtador/${pkg}.java`;
+  /* Classes do repositório auth (ADR-0007): auth/<módulo>/…, fora deste repositório. */
+  const JA = (modulo, pkg) => `auth/${modulo}/src/main/java/br/com/authcore/${pkg}.java`;
   const SPRING = 'Spring Security', CLIENT = 'Spring Security OAuth2 Client', SAS = 'Spring Authorization Server';
   const ACTUATOR = 'Spring Boot Actuator';
   const CLS = {
@@ -2125,13 +2134,13 @@
     RestClient: { fw: 'Spring Framework' },
     RateLimitFilter: J('platform/ratelimit', 'ratelimit/RateLimitFilter'),
     RateLimiter: J('platform/ratelimit', 'ratelimit/RateLimiter'),
-    JwksKeySource: J('platform/security', 'security/jwt/JwksKeySource'),
-    CurrentUserArgumentResolver: J('platform/security', 'security/web/CurrentUserArgumentResolver'),
+    JwksKeySource: JA('security', 'security/jwt/JwksKeySource'),
+    CurrentUserArgumentResolver: JA('security', 'security/web/CurrentUserArgumentResolver'),
     AccountUserIdResolver: J('modules/account', 'account/application/AccountUserIdResolver'),
     AccountRepository: J('modules/account', 'account/infra/AccountRepository'),
     LinkView: J('modules/link', 'link/application/LinkView'),
     NotFoundAdvice: J('apps/bff', 'bff/web/NotFoundAdvice'),
-    LoginController: J('apps/auth-server', 'auth/web/LoginController'),
+    LoginController: JA('server', 'server/web/LoginController'),
     NimbusJwtDecoder: { fw: SPRING },
     ExceptionTranslationFilter: { fw: SPRING },
     LinkController: J('modules/link', 'link/api/LinkController'),
@@ -2166,21 +2175,21 @@
     OAuthClientConfig: J('apps/bff', 'bff/config/OAuthClientConfig'),
     ApiProxyController: J('apps/bff', 'bff/proxy/ApiProxyController'),
     ProblemAuthenticationEntryPoint: J('apps/bff', 'bff/web/ProblemAuthenticationEntryPoint'),
-    RateLimitedAuthenticationProvider: J('apps/auth-server', 'auth/credential/RateLimitedAuthenticationProvider'),
-    CredentialUserDetailsService: J('apps/auth-server', 'auth/credential/CredentialUserDetailsService'),
-    CredentialRepository: J('apps/auth-server', 'auth/credential/CredentialRepository'),
-    PasswordPolicy: J('apps/auth-server', 'auth/credential/PasswordPolicy'),
-    SecurityConfig: J('apps/auth-server', 'auth/config/SecurityConfig'),
-    RegistrationController: J('apps/auth-server', 'auth/web/RegistrationController'),
-    RegistrationService: J('apps/auth-server', 'auth/credential/RegistrationService'),
-    AccountController: J('apps/auth-server', 'auth/web/AccountController'),
-    PasswordChangeService: J('apps/auth-server', 'auth/credential/PasswordChangeService'),
-    PanelRedirects: J('apps/auth-server', 'auth/config/PanelRedirects'),
-    TokenClaimsCustomizer: J('apps/auth-server', 'auth/token/TokenClaimsCustomizer'),
-    TokenConfig: J('apps/auth-server', 'auth/token/TokenConfig'),
-    SigningKeys: J('apps/auth-server', 'auth/token/SigningKeys'),
-    DeviceClientAuthenticationConverter: J('apps/auth-server', 'auth/token/DeviceClientAuthenticationConverter'),
-    UnrememberedConsentService: J('apps/auth-server', 'auth/token/UnrememberedConsentService'),
+    RateLimitedAuthenticationProvider: JA('server', 'server/credential/RateLimitedAuthenticationProvider'),
+    CredentialUserDetailsService: JA('server', 'server/credential/CredentialUserDetailsService'),
+    CredentialRepository: JA('server', 'server/credential/CredentialRepository'),
+    PasswordPolicy: JA('server', 'server/credential/PasswordPolicy'),
+    SecurityConfig: JA('server', 'server/config/SecurityConfig'),
+    RegistrationController: JA('server', 'server/web/RegistrationController'),
+    RegistrationService: JA('server', 'server/credential/RegistrationService'),
+    AccountController: JA('server', 'server/web/AccountController'),
+    PasswordChangeService: JA('server', 'server/credential/PasswordChangeService'),
+    PanelRedirects: JA('server', 'server/config/PanelRedirects'),
+    TokenClaimsCustomizer: JA('server', 'server/token/TokenClaimsCustomizer'),
+    TokenConfig: JA('server', 'server/token/TokenConfig'),
+    SigningKeys: JA('server', 'server/token/SigningKeys'),
+    DeviceClientAuthenticationConverter: JA('server', 'server/token/DeviceClientAuthenticationConverter'),
+    UnrememberedConsentService: JA('server', 'server/token/UnrememberedConsentService'),
   };
   const RECURSO = {
     postgres: 'PostgreSQL', redis: 'Redis', kafka: 'Kafka', 'auth-server': 'auth-server', api: 'api', bff: 'bff',
@@ -4238,18 +4247,19 @@
 
   const SHAPE_OF = {
     app: 'square', infra: 'triangle', cliente: 'circle', ferramenta: 'diamond', teste: 'pentagon',
-    negocio: 'circle', plataforma: 'triangle', frontend: 'hexagon', build: 'diamond', endpoint: 'circle',
+    negocio: 'circle', plataforma: 'triangle', frontend: 'hexagon', build: 'diamond', endpoint: 'circle', externo: 'pentagon',
     classe: 'circle', regra: 'diamond', resposta: 'circle',
   };
   const KIND_LABEL = {
     app: 'Aplicação', infra: 'Serviço de infraestrutura', cliente: 'Cliente', ferramenta: 'Ferramenta de inspeção',
     teste: 'Teste ponta a ponta', negocio: 'Módulo de negócio', plataforma: 'Módulo de plataforma', frontend: 'Frontend',
+    externo: 'Biblioteca do repositório auth',
     build: 'Ferramenta de build', passo: 'Passo do fluxo', endpoint: 'Endpoint',
     classe: 'Classe', regra: 'Classe que decide', resposta: 'Resposta',
   };
   const KIND_SHORT = {
     app: 'app', infra: 'infra', cliente: 'cliente', ferramenta: 'ferramenta', teste: 'teste', negocio: 'módulo',
-    plataforma: 'módulo', frontend: 'frontend', build: 'módulo', endpoint: 'endpoint',
+    plataforma: 'módulo', frontend: 'frontend', build: 'módulo', endpoint: 'endpoint', externo: 'biblioteca',
     classe: 'classe', regra: 'classe', resposta: 'resposta',
   };
   const STEP_KIND_LABEL = {
@@ -5913,8 +5923,9 @@
     const c = CLS[classe];
     if (!c) return {};
     if (typeof c !== 'string') return { fw: c.fw };
-    const m = c.match(/^(?:platform|modules|apps|frontend)\/([^/]+)/);
-    return { arquivo: c, mod: m && nodeById(m[1], 'modulos') ? m[1] : null };
+    const m = c.match(/^(?:platform|modules|apps|frontend|auth)\/([^/]+)/);
+    const id = m && (c.startsWith('auth/server/') ? 'auth-server' : m[1]);
+    return { arquivo: c, mod: id && nodeById(id, 'modulos') ? id : null };
   }
   /* Passo de um caminho: cls:<endpoint>/<id> (fluxo de classes) ou tls:<tela>/<id> (fluxo da tela). */
   function stepCtx(ref) {
@@ -6115,7 +6126,7 @@
     if (viewType() === 'ep') return epSummary(CAT[`ep:${viewArg()}`]);
     if (isFlowView()) {
       const f = FLUXOS[flowOfView()];
-      return frame({ kind: `Fluxo · ${esc(f.sub)}`, title: esc(f.nome), body: `${flowBody(f)}<p class="note">Montado a partir do código das aplicações e dos módulos, no estado de 2026-11-07. Clique num passo para a regra e a configuração dele; as saídas de cada passo levam aos próximos.</p>` });
+      return frame({ kind: `Fluxo · ${esc(f.sub)}`, title: esc(f.nome), body: `${flowBody(f)}<p class="note">Montado a partir do código das aplicações e dos módulos, no estado de 2026-11-08. Clique num passo para a regra e a configuração dele; as saídas de cada passo levam aos próximos.</p>` });
     }
     if (st.view === 'trafego') {
       const count = (k) => visNodes.filter((n) => n.kind === k).length;
@@ -6128,14 +6139,15 @@
       h += section('Saúde', `<ul class="health-sum">${['ok', 'degradado', 'falha', 'fora'].map((s) => `<li class="health h-${s}" style="margin:0">${ICON[s]}<span>${HEALTH_LABEL[s]}</span><span class="n">${by(s)}</span></li>`).join('')}</ul>${st.down.size ? '<p style="margin:10px 0 0"><button class="btn btn-secondary btn-sm" data-act="restore">Restaurar tudo</button></p>' : ''}`);
       h += section('Caminhos', `<div class="paths">${TRAFEGO.paths.map((p) => `<button class="path-btn" data-act="path" data-arg="${p.id}" aria-pressed="${st.path === p.id}"><strong>${esc(p.nome)}</strong><span>${esc(p.desc)}</span></button>`).join('')}</div>`);
       h += refSection('Fluxos passo a passo', Object.values(FLUXOS).map((f) => `flow:${f.id}`));
-      h += '<p class="note">Montado a partir do compose.yaml, dos application.yml, do código e dos ADRs 0001 a 0006, no estado de 2026-11-07. A animação é ilustrativa: a densidade dos pontos segue o papel de cada caminho, e não métricas medidas.</p>';
+      h += '<p class="note">Montado a partir do compose.yaml, dos application.yml, do código e dos ADRs 0001 a 0007, no estado de 2026-11-08. A animação é ilustrativa: a densidade dos pontos segue o papel de cada caminho, e não métricas medidas.</p>';
       return frame({ kind: 'Resumo', title: 'Stack do compose', body: h });
     }
-    const k = (kind) => MODULOS.nodes.filter((n) => n.kind === kind).length;
+    const daqui = MODULOS.nodes.filter((n) => n.group !== 'auth');
+    const k = (kind) => daqui.filter((n) => n.kind === kind).length;
     let h = '<p class="lede">Quem compila contra quem. Passe o mouse num módulo para ver só as dependências dele; clique para a ficha, com os endpoints, os dados e os fluxos de cada um.</p>';
-    h += `<div class="stats">${stat(MODULOS.nodes.length, 'módulos no reactor')}${stat(`${k('app')} · ${k('negocio')} · ${k('plataforma')}`, 'aplicações · negócio · plataforma')}${stat('480 + 74', 'testes em Java + Vitest')}${stat('97,0%', 'linhas cobertas (1516/1563)')}</div>`;
-    h += section('Regras', '<ul class="plain-list"><li>O Maven barra na compilação um import de módulo não declarado.</li><li>O Spring Modulith verifica a cada build que os subpacotes de cada módulo são internos.</li><li>O <code>security</code> não conhece os módulos de negócio nem quem emite o token.</li><li>Só a <code>api</code> depende das implementações dos módulos de negócio; o <code>redirect</code> usa só os contratos <code>link-cache</code> e <code>clicks</code> e a plataforma; <code>auth-server</code> e <code>bff</code>, só a plataforma.</li></ul>');
-    h += '<p class="note">Do README e dos poms, no estado de 2026-11-07. Os testes são os do build verde depois do ADR-0006.</p>';
+    h += `<div class="stats">${stat(daqui.length, 'módulos no reactor')}${stat(MODULOS.nodes.length - daqui.length, 'do repositório auth')}${stat(`${k('app')} · ${k('negocio')} · ${k('plataforma')}`, 'aplicações · negócio · plataforma')}${stat('407 + 74', 'testes em Java + Vitest')}${stat('98,0%', 'linhas cobertas (1180/1204)')}</div>`;
+    h += section('Regras', '<ul class="plain-list"><li>O Maven barra na compilação um import de módulo não declarado.</li><li>O Spring Modulith verifica a cada build que os subpacotes de cada módulo são internos.</li><li>A segurança das APIs vem do repositório <code>auth</code>: o <code>auth-security</code> e o <code>auth-security-api</code>, do GitHub Packages, na versão <code>auth.version</code>. O <code>auth-security</code> não conhece os módulos de negócio nem quem emite o token.</li><li>Só a <code>api</code> depende das implementações dos módulos de negócio; o <code>redirect</code> usa só os contratos <code>link-cache</code> e <code>clicks</code> e a plataforma; o <code>bff</code>, só a plataforma. O <code>auth-server</code> não é dependência Maven de nada daqui: roda como imagem.</li></ul>');
+    h += '<p class="note">Do README e dos poms, no estado de 2026-11-08. Os testes são os do build verde depois do ADR-0007; os do repositório auth estão nas fichas dos nós dele.</p>';
     return frame({ kind: 'Resumo', title: 'Módulos Maven', body: h });
   }
 
@@ -6324,7 +6336,7 @@
         <p>A animação é ilustrativa: a densidade dos pontos vem do papel de cada caminho (o redirecionamento é o caminho quente), e não de métricas.</p>`;
     }
     return `<h2>Legenda</h2>
-      <h3>Nós</h3><ul>${shapeItem('app', 'Aplicação')}${shapeItem('negocio', 'Módulo de negócio')}${shapeItem('plataforma', 'Módulo de plataforma')}${shapeItem('frontend', 'Frontend (jar com a SPA)')}${shapeItem('build', 'Ferramenta de build')}</ul>
+      <h3>Nós</h3><ul>${shapeItem('app', 'Aplicação')}${shapeItem('negocio', 'Módulo de negócio')}${shapeItem('plataforma', 'Módulo de plataforma')}${shapeItem('frontend', 'Frontend (jar com a SPA)')}${shapeItem('build', 'Ferramenta de build')}${shapeItem('externo', 'Biblioteca do repositório auth (GitHub Packages)')}</ul>
       <h3>Arestas</h3><ul>${lineItem('var(--border-strong)', 'Compila contra')}${lineItem('var(--accent)', 'Empacota o frontend', '7 4')}${lineItem('var(--idle)', 'Agrega a cobertura', '2 4')}</ul>`;
   }
   function toggleLegend(force) {

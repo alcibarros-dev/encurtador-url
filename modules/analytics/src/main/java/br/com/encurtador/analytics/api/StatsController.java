@@ -1,8 +1,8 @@
 package br.com.encurtador.analytics.api;
 
+import br.com.authcore.security.CurrentUser;
+import br.com.authcore.security.OpenApiSecurity;
 import br.com.encurtador.analytics.application.StatsService;
-import dev.alcibarros.auth.security.CurrentUser;
-import dev.alcibarros.auth.security.OpenApiSecurity;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;

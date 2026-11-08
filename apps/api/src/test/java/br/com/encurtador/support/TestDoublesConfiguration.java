@@ -1,7 +1,7 @@
 package br.com.encurtador.support;
 
+import br.com.authcore.security.UserIdResolver;
 import br.com.encurtador.link.application.RandomShortCodeGenerator;
-import dev.alcibarros.auth.security.UserIdResolver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;

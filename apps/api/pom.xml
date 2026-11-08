@@ -30,11 +30,11 @@
             <artifactId>encurtador-url-ratelimit</artifactId>
         </dependency>
         <dependency>
-            <groupId>dev.alcibarros</groupId>
+            <groupId>br.com.authcore</groupId>
             <artifactId>auth-security-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>dev.alcibarros</groupId>
+            <groupId>br.com.authcore</groupId>
             <artifactId>auth-security</artifactId>
         </dependency>
         <dependency>

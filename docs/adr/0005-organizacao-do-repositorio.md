@@ -47,7 +47,7 @@ Problemas que isso causa na leitura:
 > `modules/redirect`); `modules/` perde `redirect/` e ganha `clicks/` e `link-cache/`.
 >
 > **Ajustada pelo ADR-0007** (2026-11-08): `apps/` perde `auth-server/`, que vai para o repositório
-> [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth) e chega como imagem; `infra/` ganha `auth-server/`,
+> [auth](https://github.com/alcibarros-dev/auth) e chega como imagem; `infra/` ganha `auth-server/`,
 > com a configuração do encurtador para ela e o script de importação das contas.
 
 ```text

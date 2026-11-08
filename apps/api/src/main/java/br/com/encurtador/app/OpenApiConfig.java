@@ -1,6 +1,6 @@
 package br.com.encurtador.app;
 
-import dev.alcibarros.auth.security.OpenApiSecurity;
+import br.com.authcore.security.OpenApiSecurity;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;

@@ -19,7 +19,7 @@ Kafka, feita a partir de ADRs revisados antes da primeira linha de código:
 - Painel web (Angular, atrás de um BFF): cadastro, login, logout e troca de senha pelas páginas do `auth-server`,
   gestão dos links e estatísticas do usuário. Nenhum token chega ao navegador: ele só tem o cookie de sessão do BFF.
 - Contas num servidor de autorização próprio (`auth-server`, OAuth 2.1 e OpenID Connect, do repositório
-  [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth)): cadastro, login, logout e troca de senha em páginas
+  [auth](https://github.com/alcibarros-dev/auth)): cadastro, login, logout e troca de senha em páginas
   dele, e login da CLI pelo fluxo de dispositivo. A API nunca vê senha: valida os access
   tokens pelas chaves públicas do emissor e continua validando com ele fora do ar.
 - Links com código aleatório de 7 caracteres ou alias próprio, validade de 1 minuto a 365 dias e cota de 100 links
@@ -46,7 +46,7 @@ aplicações separadas: o BFF do painel ([ADR-0004](docs/adr/0004-frontend-angul
 redirecionamento, que atende os links curtos e escala sem a API
 ([ADR-0006](docs/adr/0006-servico-de-redirecionamento.md)). O servidor de autorização
 ([ADR-0003](docs/adr/0003-servidor-de-autorizacao.md)) tem repositório próprio,
-[alcibarros-dev/auth](https://github.com/alcibarros-dev/auth), para ser reaproveitado por outros projetos: aqui ele
+[auth](https://github.com/alcibarros-dev/auth), para ser reaproveitado por outros projetos: aqui ele
 chega como a imagem `ghcr.io/alcibarros-dev/auth`, com os clientes do encurtador num arquivo de configuração
 ([ADR-0007](docs/adr/0007-servidor-de-autorizacao-em-repositorio-proprio.md)). A API e o redirect combinam só dois
 contratos, o cache no Redis e o evento de clique no Kafka, e o redirect lê a tabela `links` da API, só para leitura.
@@ -105,12 +105,17 @@ Dependências entre módulos:
 | `bff` | `web`, `shared`, `ratelimit` |
 | `coverage` | todos os de Java |
 
-A segurança das APIs vem do repositório [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth), o mesmo do
+A segurança das APIs vem do repositório [auth](https://github.com/alcibarros-dev/auth), o mesmo do
 servidor de autorização, em duas bibliotecas publicadas no GitHub Packages
 ([ADR-0007](docs/adr/0007-servidor-de-autorizacao-em-repositorio-proprio.md), D7): o `auth-security-api`, com os
 contratos que os módulos de negócio usam (`@CurrentUser`, `UserIdResolver`, `PublicRoutes`, `OpenApiSecurity`), e o
 `auth-security`, que valida o token pelo JWKS e responde 401, 403 e 503. A versão fica em `auth.version`, no `pom.xml`
-da raiz, e é a mesma da imagem do `auth-server` no compose.
+da raiz, e é a mesma da imagem do `auth-server` no compose. Os pacotes publicados estão na página do
+[repositório auth](https://github.com/alcibarros-dev/auth), em **Packages**:
+[`auth-security`](https://github.com/alcibarros-dev/auth/packages/3374253),
+[`auth-security-api`](https://github.com/alcibarros-dev/auth/packages/3374252),
+[`auth-support`](https://github.com/alcibarros-dev/auth/packages/3374251) e
+[`auth-parent`](https://github.com/alcibarros-dev/auth/packages/3374250).
 
 O Maven barra na compilação um import de módulo não declarado. O Spring Modulith continua verificando a cada build o
 que o Maven não vê: os subpacotes de cada módulo são internos, e só o pacote raiz é API. O `auth-security` não conhece
@@ -235,12 +240,18 @@ e roda o lint, os testes e o build do Angular. O perfil Maven `local`, ativo por
 Spring Boot; outro perfil do Spring entra com `-Dspring-boot.run.profiles=<perfil>`. O perfil `local` só funciona pelo
 Maven ou pela IDE: o suporte a Docker Compose não entra no jar empacotado.
 
-O servidor de autorização vem pronto, na versão fixada no `compose.yaml` (`AUTH_IMAGE_TAG` troca a versão). Os
-clientes OAuth, a audiência dos tokens e o nome das páginas ficam em
-[`infra/auth-server/application.yml`](infra/auth-server/application.yml), que o compose monta no container. Para
-mexer no próprio servidor, use o repositório [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth); para testar
-uma versão dele aqui antes de publicá-la, construa a imagem lá com a tag que o compose usa
-(`docker build -t ghcr.io/alcibarros-dev/auth:0.1.0 .`).
+O servidor de autorização vem pronto: o compose baixa a imagem pública
+[`ghcr.io/alcibarros-dev/auth`](https://github.com/users/alcibarros-dev/packages/container/package/auth), sem login,
+na versão fixada no `compose.yaml` (`AUTH_IMAGE_TAG` troca a versão). Os clientes OAuth, a audiência dos tokens e o
+nome das páginas ficam em [`infra/auth-server/application.yml`](infra/auth-server/application.yml), que o compose
+monta no container. Para mexer no próprio servidor ou nas bibliotecas de segurança, use o repositório
+[auth](https://github.com/alcibarros-dev/auth). Para testar aqui uma mudança de lá antes de publicá-la,
+construa a imagem lá com a tag que o compose usa (`docker build -t ghcr.io/alcibarros-dev/auth:0.2.0 .`) e instale as
+bibliotecas no `~/.m2` com `./mvnw install`, com a versão do `auth.version`.
+
+**Subir a versão do auth:** publique a versão nova no repositório `auth` (tag `vX.Y.Z`, que publica a imagem e as
+bibliotecas) e troque o número aqui em dois lugares, juntos: `auth.version` no `pom.xml` da raiz e o padrão de
+`AUTH_IMAGE_TAG` no `compose.yaml`. Os testes de ponta a ponta do CI conferem os dois.
 
 No IntelliJ, as Run Configurations vêm com o repositório, em `.idea/runConfigurations/`:
 
@@ -609,7 +620,7 @@ Limites padrão (`app.rate-limit.*`):
 Só exige Docker: o Testcontainers sobe PostgreSQL, Redis, Kafka e Toxiproxy reais. O build roda os testes unitários de
 cada módulo, os de integração (na API, no redirect e no `bff`, porque sobem a aplicação inteira), o lint, os testes e o
 build do painel, a verificação de módulos do Spring Modulith e o gate de cobertura (JaCoCo, mínimo de 80% de linhas fora
-de configuração; hoje em torno de 97%). O gate e o relatório ficam no módulo `tools/coverage`, que junta a cobertura de
+de configuração; hoje em torno de 98%). O gate e o relatório ficam no módulo `tools/coverage`, que junta a cobertura de
 todos: `tools/coverage/target/site/jacoco-aggregate/`. O painel tem gate próprio, de 80% de linhas no Vitest
 (`frontend/web/coverage/`).
 

@@ -134,7 +134,7 @@ Regras:
 ### D3 — Contratos de segurança (`security-api`)
 
 > **Ajustada pelo ADR-0007** (2026-11-08, D7): o `security-api` sai de `platform/` e vira o `auth-security-api` do
-> repositório [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth), no pacote `dev.alcibarros.auth.security`,
+> repositório [auth](https://github.com/alcibarros-dev/auth), no pacote `br.com.authcore.security`,
 > baixado do GitHub Packages. O conteúdo não muda.
 
 O `security-api` não tem dependências de framework. Contém:

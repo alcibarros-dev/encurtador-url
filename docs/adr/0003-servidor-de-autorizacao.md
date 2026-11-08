@@ -51,7 +51,7 @@ se precisar saber quem entrou; o access token é validado pelo app.
 > **Ajustada pelo ADR-0005** (2026-11-06): o `auth-server` fica em `apps/auth-server`.
 >
 > **Ajustada pelo ADR-0007** (2026-11-08): o `auth-server` sai deste repositório para
-> [alcibarros-dev/auth](https://github.com/alcibarros-dev/auth), com cópia do `shared` e do `ratelimit` que usa, e
+> [auth](https://github.com/alcibarros-dev/auth), com cópia do `shared` e do `ratelimit` que usa, e
 > chega ao encurtador como imagem. Os clientes e a audiência saem do código para `infra/auth-server/application.yml`.
 
 ```text

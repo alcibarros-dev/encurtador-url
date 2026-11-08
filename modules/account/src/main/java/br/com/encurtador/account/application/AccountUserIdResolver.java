@@ -1,8 +1,8 @@
 package br.com.encurtador.account.application;
 
+import br.com.authcore.security.UnknownSubjectException;
+import br.com.authcore.security.UserIdResolver;
 import br.com.encurtador.account.infra.AccountRepository;
-import dev.alcibarros.auth.security.UnknownSubjectException;
-import dev.alcibarros.auth.security.UserIdResolver;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 

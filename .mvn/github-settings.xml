@@ -3,7 +3,7 @@
     Settings globais do Maven deste repositório, ligados pelo .mvn/maven.config (ADR-0007, D7). O ~/.m2/settings.xml
     de cada um continua valendo por cima destes.
 
-    O servidor "github" baixa as bibliotecas de segurança do GitHub Packages (alcibarros-dev/auth), que exige token
+    O servidor "github" baixa as bibliotecas de segurança do GitHub Packages (auth), que exige token
     até para pacotes públicos. Defina no ambiente, uma vez:
       GITHUB_ACTOR  o seu usuário do GitHub
       GITHUB_TOKEN  um token (classic) com o escopo read:packages

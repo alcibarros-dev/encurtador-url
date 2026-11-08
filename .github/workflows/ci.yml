@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  # As bibliotecas de segurança vêm do GitHub Packages do repositório alcibarros-dev/auth (ADR-0007, D7).
+  # As bibliotecas de segurança vêm do GitHub Packages do repositório auth (ADR-0007, D7).
   packages: read
 
 # O .mvn/github-settings.xml lê o token daqui; o GITHUB_ACTOR já vem do Actions.
