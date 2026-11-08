@@ -11,8 +11,7 @@ import java.time.ZoneId;
 /**
  * Cliques e estatísticas ({@code app.analytics.*}, ADR-0001, D8).
  *
- * @param bufferCapacity    tamanho da fila em memória entre o redirecionamento e o Kafka
- * @param topic             tópico dos cliques; a chave é o {@code linkId}
+ * @param topic             tópico dos cliques, publicados pelo serviço de redirecionamento (ADR-0006, D5)
  * @param deadLetterTopic   destino explícito das mensagens que o consumidor não consegue gravar
  * @param partitions        partições dos dois tópicos (o recoverer publica na mesma partição do registro original)
  * @param replicationFactor 1 no ambiente local
@@ -21,7 +20,6 @@ import java.time.ZoneId;
 @Validated
 @ConfigurationProperties("app.analytics")
 public record AnalyticsProperties(
-        @Min(1) int bufferCapacity,
         @NotBlank String topic,
         @NotBlank String deadLetterTopic,
         @Min(1) int partitions,

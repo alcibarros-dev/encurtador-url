@@ -25,10 +25,12 @@
         <module>platform/security</module>
         <module>modules/account</module>
         <module>modules/link</module>
+        <module>modules/clicks</module>
+        <module>modules/link-cache</module>
         <module>modules/analytics</module>
-        <module>modules/redirect</module>
         <!-- A API antes das outras aplicações: o spring-boot:run sem -pl sobe a primeira do reactor (ADR-0005, D7) -->
         <module>apps/api</module>
+        <module>apps/redirect</module>
         <module>apps/auth-server</module>
         <module>frontend/web</module>
         <module>apps/bff</module>
@@ -41,9 +43,9 @@
         <springdoc.version>3.2.0</springdoc.version>
         <jacoco.version>0.8.16</jacoco.version>
         <jacoco.minimum-line-coverage>0.80</jacoco.minimum-line-coverage>
-        <!-- Só as aplicações (apps/api, apps/auth-server, apps/bff) rodam com spring-boot:run; as bibliotecas o
-             ignoram. Na raiz, sobe a API, a primeira do reactor; cada aplicação roda com -pl apps/<aplicação> -am
-             (ADR-0003, D11; ADR-0005, D7) -->
+        <!-- Só as aplicações (apps/api, apps/redirect, apps/auth-server, apps/bff) rodam com spring-boot:run; as
+             bibliotecas o ignoram. Na raiz, sobe a API, a primeira do reactor; cada aplicação roda com
+             -pl apps/<aplicação> -am (ADR-0003, D11; ADR-0005, D7; ADR-0006, D1) -->
         <spring-boot.run.skip>true</spring-boot.run.skip>
     </properties>
 
@@ -77,6 +79,16 @@
             <dependency>
                 <groupId>br.com.encurtador</groupId>
                 <artifactId>encurtador-url-link</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>br.com.encurtador</groupId>
+                <artifactId>encurtador-url-clicks</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>br.com.encurtador</groupId>
+                <artifactId>encurtador-url-link-cache</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -150,6 +162,7 @@
                     <configuration>
                         <excludes>
                             <exclude>br/com/encurtador/EncurtadorApplication.class</exclude>
+                            <exclude>br/com/encurtador/RedirectApplication.class</exclude>
                             <exclude>br/com/encurtador/**/config/**</exclude>
                             <exclude>br/com/encurtador/**/*Config.class</exclude>
                             <exclude>br/com/encurtador/**/*AutoConfiguration.class</exclude>

@@ -13,9 +13,9 @@ import java.util.Map;
 
 /**
  * Limites por regra ({@code app.rate-limit.<regra>}, ADR-0001, D11), cada um uma janela fixa. As regras são declaradas
- * pelos módulos donos das rotas (ADR-0002, D5), e o nome da regra é a chave do mapa: no app, {@code link-creation},
- * {@code redirect} e {@code user-stats}; no auth-server, as de login, cadastro, troca de senha e protocolo OAuth
- * (ADR-0003, D9).
+ * pelos módulos donos das rotas (ADR-0002, D5), e o nome da regra é a chave do mapa: na API, {@code link-creation} e
+ * {@code user-stats}; no serviço de redirecionamento, {@code redirect} (ADR-0006, D6); no auth-server, as de login,
+ * cadastro, troca de senha e protocolo OAuth (ADR-0003, D9).
  */
 @Validated
 @ConfigurationProperties("app")

@@ -31,7 +31,7 @@ import java.util.Set;
  */
 public final class RateLimitFilter extends OncePerRequestFilter {
 
-    /** Probes do orquestrador nunca são limitadas, nem pela regra de um segmento do redirecionamento. */
+    /** Probes do orquestrador nunca são limitadas, nem pela regra do redirecionamento, que cobre todo GET. */
     private static final Set<String> PROBES = Set.of("/livez", "/readyz");
 
     private final List<BoundRule> rules;

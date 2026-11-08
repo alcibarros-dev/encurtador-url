@@ -85,11 +85,11 @@ describe('LinksPage', () => {
 
   it('criar abre o diálogo e, com um link criado, volta para a primeira página', async () => {
     const fixture = await render(page([aLink()]));
-    dialogResult = aLink({ code: 'novo', shortUrl: 'http://localhost:8080/novo' });
+    dialogResult = aLink({ code: 'novo', shortUrl: 'http://localhost:8060/novo' });
 
     button(fixture.nativeElement, 'Criar link').click();
 
-    expect(notifier.info).toHaveBeenCalledWith('Link criado: http://localhost:8080/novo');
+    expect(notifier.info).toHaveBeenCalledWith('Link criado: http://localhost:8060/novo');
     http.expectOne('/api/v1/links?page=0&size=20').flush(page([aLink()]));
   });
 
@@ -100,7 +100,7 @@ describe('LinksPage', () => {
     button(fixture.nativeElement, 'Copiar URL curta').click();
     button(fixture.nativeElement, 'Copiar URL curta').click();
 
-    expect(copy).toHaveBeenCalledWith('http://localhost:8080/meu-artigo');
+    expect(copy).toHaveBeenCalledWith('http://localhost:8060/meu-artigo');
     expect(notifier.info).toHaveBeenCalledWith('URL curta copiada.');
     expect(notifier.error).toHaveBeenCalled();
   });

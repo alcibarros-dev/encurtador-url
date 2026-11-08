@@ -1,11 +1,10 @@
 /**
- * Cliques e estatísticas (ADR-0001, D8). Analytics é eventual e tolerante a perdas pontuais: o redirecionamento só
- * entrega o clique a uma fila em memória e nunca espera pelo Kafka.
- * <p>
- * API pública: {@link br.com.encurtador.analytics.ClickRecorder} e o evento
- * {@link br.com.encurtador.analytics.LinkClicked}.
+ * Consumo dos cliques e estatísticas (ADR-0001, D8). Analytics é eventual e tolerante a perdas pontuais: os cliques
+ * chegam pelo tópico {@code link-clicks}, publicados pelo serviço de redirecionamento (ADR-0006, D5), no formato do
+ * evento {@link br.com.encurtador.clicks.LinkClicked}. É o dono dos tópicos e da DLT.
  */
-@ApplicationModule(displayName = "Analytics", allowedDependencies = {"link", "ratelimit", "security", "shared"})
+@ApplicationModule(displayName = "Analytics",
+        allowedDependencies = {"clicks", "link", "ratelimit", "security", "shared"})
 package br.com.encurtador.analytics;
 
 import org.springframework.modulith.ApplicationModule;

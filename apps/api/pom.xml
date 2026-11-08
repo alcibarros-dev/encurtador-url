@@ -10,7 +10,8 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <!-- Raiz de composição: classe principal, configuração, migrações e testes de integração (ADR-0002, D1) -->
+    <!-- Raiz de composição: classe principal, configuração, migrações e testes de integração (ADR-0002, D1). O
+         redirecionamento roda à parte, em apps/redirect (ADR-0006) -->
     <artifactId>encurtador-url-api</artifactId>
     <name>encurtador-url-api</name>
 
@@ -48,9 +49,10 @@
             <groupId>br.com.encurtador</groupId>
             <artifactId>encurtador-url-analytics</artifactId>
         </dependency>
+        <!-- Só para gravar o tombstone de remoção; o redirecionamento é o serviço apps/redirect (ADR-0006, D4) -->
         <dependency>
             <groupId>br.com.encurtador</groupId>
-            <artifactId>encurtador-url-redirect</artifactId>
+            <artifactId>encurtador-url-link-cache</artifactId>
         </dependency>
 
         <!-- Web e validação -->

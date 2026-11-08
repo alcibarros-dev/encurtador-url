@@ -10,11 +10,15 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <!-- Cliques e estatísticas (ADR-0001, D8) -->
+    <!-- Consumo dos cliques e estatísticas (ADR-0001, D8; o produtor fica no redirect, ADR-0006, D5) -->
     <artifactId>encurtador-url-analytics</artifactId>
     <name>encurtador-url-analytics</name>
 
     <dependencies>
+        <dependency>
+            <groupId>br.com.encurtador</groupId>
+            <artifactId>encurtador-url-clicks</artifactId>
+        </dependency>
         <dependency>
             <groupId>br.com.encurtador</groupId>
             <artifactId>encurtador-url-link</artifactId>

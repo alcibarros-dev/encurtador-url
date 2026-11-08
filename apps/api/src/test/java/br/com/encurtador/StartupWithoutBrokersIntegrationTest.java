@@ -1,9 +1,7 @@
 package br.com.encurtador;
 
-import br.com.encurtador.link.application.LinkService;
 import br.com.encurtador.support.ApiClient;
 import br.com.encurtador.support.IntegrationTest;
-import br.com.encurtador.support.TestAccounts;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -16,11 +14,11 @@ import java.net.ServerSocket;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 
 /**
- * A aplicação sobe e redireciona com o Redis e o Kafka fora, só com o PostgreSQL (ADR-0001, RNF02; cenário 15 do
- * D14). Sobe uma segunda instância, que aponta para portas sem ninguém escutando.
+ * A API sobe pronta com o Redis e o Kafka fora, só com o PostgreSQL (ADR-0001, RNF02; cenário 15 do D14). Sobe uma
+ * segunda instância, que aponta para portas sem ninguém escutando. O redirecionamento sem brokers é testado no serviço
+ * apps/redirect (ADR-0006, D7).
  */
 @IntegrationTest
 class StartupWithoutBrokersIntegrationTest {
@@ -28,17 +26,8 @@ class StartupWithoutBrokersIntegrationTest {
     @Autowired
     PostgreSQLContainer postgres;
 
-    @Autowired
-    LinkService links;
-
-    @Autowired
-    TestAccounts accounts;
-
     @Test
-    void startsReadyAndRedirectsWithRedisAndKafkaDown() throws IOException {
-        long owner = accounts.create().id();
-        String code = links.create(owner, "https://exemplo.com/", null, null).code();
-
+    void startsReadyWithRedisAndKafkaDown() throws IOException {
         long start = System.nanoTime();
         try (ConfigurableApplicationContext app = new SpringApplicationBuilder(EncurtadorApplication.class)
                 .profiles("test")
@@ -52,15 +41,7 @@ class StartupWithoutBrokersIntegrationTest {
                         "--spring.kafka.bootstrap-servers=127.0.0.1:" + closedPort())) {
             assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(60));
             ApiClient api = new ApiClient(((WebServerApplicationContext) app).getWebServer().getPort());
-            ApiClient management = new ApiClient(Integer.parseInt(
-                    app.getEnvironment().getRequiredProperty("local.management.port")));
 
-            assertThat(api.get("/readyz", null).status()).isEqualTo(200);
-            assertThat(api.get("/" + code, null).status()).isEqualTo(302);
-
-            // O clique não sai (max.block.ms sem metadados): a publicação aparece como DOWN, a readiness não muda.
-            await().atMost(Duration.ofSeconds(20)).until(() -> "DOWN".equals(management.get("/actuator/health", null)
-                    .body().path("components").path("kafkaPublish").path("status").asString()));
             assertThat(api.get("/readyz", null).status()).isEqualTo(200);
         }
     }

@@ -52,7 +52,7 @@ describe('LinkDetailPage', () => {
 
     copy.mockReturnValue(true);
     (element.querySelector('.acoes button') as HTMLButtonElement).click();
-    expect(copy).toHaveBeenCalledWith('http://localhost:8080/meu-artigo');
+    expect(copy).toHaveBeenCalledWith('http://localhost:8060/meu-artigo');
     expect(notifier.info).toHaveBeenCalledWith('URL curta copiada.');
     copy.mockReturnValue(false);
     (element.querySelector('.acoes button') as HTMLButtonElement).click();

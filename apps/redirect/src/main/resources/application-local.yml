@@ -1,0 +1,15 @@
+# Perfil de desenvolvimento: sobe o compose.yaml automaticamente.
+# Uso: ./mvnw -pl apps/redirect -am spring-boot:run
+spring:
+  docker:
+    compose:
+      enabled: true
+      lifecycle-management: start-only
+  kafka:
+    # O suporte a Docker Compose do Spring Boot não cria conexão para o Kafka (ADR-0001, D15).
+    bootstrap-servers: localhost:9092
+
+logging:
+  structured:
+    format:
+      console: ""

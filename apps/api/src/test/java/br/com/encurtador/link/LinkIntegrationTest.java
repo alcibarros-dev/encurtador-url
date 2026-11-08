@@ -83,7 +83,8 @@ class LinkIntegrationTest {
         String code = response.text("code");
         assertThat(code).matches("[0-9A-Za-z]{7}");
         assertThat(response.header("Location")).hasValue(LINKS + "/" + code);
-        assertThat(response.text("shortUrl")).isEqualTo("http://localhost:8080/" + code);
+        // O link curto é do serviço de redirecionamento (ADR-0006, D1).
+        assertThat(response.text("shortUrl")).isEqualTo("http://localhost:8060/" + code);
         assertThat(response.text("targetUrl")).isEqualTo(TARGET);
         assertThat(response.text("status")).isEqualTo("ACTIVE");
         Instant createdAt = Instant.parse(response.text("createdAt"));

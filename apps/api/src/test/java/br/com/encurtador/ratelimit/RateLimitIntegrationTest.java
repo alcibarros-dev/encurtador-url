@@ -1,6 +1,5 @@
 package br.com.encurtador.ratelimit;
 
-import br.com.encurtador.link.application.LinkService;
 import br.com.encurtador.ratelimit.RateLimitProperties.Limit;
 import br.com.encurtador.shared.redis.RedisGuard;
 import br.com.encurtador.support.ApiClient;
@@ -30,12 +29,10 @@ import static org.awaitility.Awaitility.await;
  * Limites pela cadeia HTTP real (ADR-0001, D11; cenário 16 do D14). Os testes compartilham o IP 127.0.0.1, então o
  * perfil de teste usa limites altíssimos; aqui o contador da janela é preenchido até o limite configurado, e a
  * requisição seguinte é a primeira acima dele. Os limites de login, cadastro e troca de senha são do auth-server
- * (ADR-0003, D9).
+ * (ADR-0003, D9), e o do redirecionamento, do serviço apps/redirect (ADR-0006, D7).
  */
 @IntegrationTest
 class RateLimitIntegrationTest {
-
-    private static final String CLIENT_IP = "127.0.0.1";
 
     @LocalServerPort
     int port;
@@ -51,9 +48,6 @@ class RateLimitIntegrationTest {
 
     @Autowired
     TestAccounts accounts;
-
-    @Autowired
-    LinkService links;
 
     @Autowired
     RedisProxy redisProxy;
@@ -84,21 +78,6 @@ class RateLimitIntegrationTest {
     }
 
     @Test
-    void redirectAboveTheLimitGets429WithRetryAfterUntilTheWindowTurns() {
-        startOfWindow(limit("redirect"));
-        String code = links.create(accounts.create().id(), "https://exemplo.com/", null, null).code();
-        double rejected = meters.counter("shortener.ratelimit.rejected", "rule", "redirect").count();
-        exhaust("redirect", limit("redirect"), CLIENT_IP);
-
-        Response limited = api.get("/" + code, null);
-
-        assertRateLimited(limited, limit("redirect"));
-        assertThat(meters.counter("shortener.ratelimit.rejected", "rule", "redirect").count()).isEqualTo(rejected + 1);
-        clock.advance(limit("redirect").window());
-        assertThat(api.get("/" + code, null).status()).isEqualTo(302);
-    }
-
-    @Test
     void linkCreationIsLimitedPerUserAndOtherUsersAreUnaffected() {
         startOfWindow(limit("link-creation"));
         TestAccount user = accounts.create();
@@ -126,20 +105,20 @@ class RateLimitIntegrationTest {
     /** Cenário 16, parte do Redis fora: o limitador libera, e a requisição segue normalmente. */
     @Test
     void redisDownLetsRequestsThroughAndIsCounted() {
-        String code = links.create(accounts.create().id(), "https://exemplo.com/", null, null).code();
-        double failOpen = meters.counter("shortener.ratelimit.failopen", "rule", "redirect").count();
+        String token = accounts.create().token();
+        double failOpen = meters.counter("shortener.ratelimit.failopen", "rule", "user-stats").count();
         redisProxy.cut();
         try {
             for (int i = 0; i < 5; i++) {
-                assertThat(api.get("/" + code, null).status()).isEqualTo(302);
+                assertThat(api.get("/api/v1/stats", token).status()).isEqualTo(200);
             }
-            assertThat(meters.counter("shortener.ratelimit.failopen", "rule", "redirect").count())
+            assertThat(meters.counter("shortener.ratelimit.failopen", "rule", "user-stats").count())
                     .isEqualTo(failOpen + 5);
         } finally {
             redisProxy.restore();
         }
         await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(200)).until(() -> {
-            api.get("/" + code, null);
+            api.get("/api/v1/stats", token);
             return guard.state() == RedisGuard.State.CLOSED;
         });
     }

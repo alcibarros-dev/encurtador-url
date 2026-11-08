@@ -43,14 +43,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Uma imagem por aplicação, com o mesmo Dockerfile (ADR-0002, D9; ADR-0003, D11). O module é o caminho do
-        # módulo; o name, só o nome do check (ADR-0005, D8).
+        # Uma imagem por aplicação, com o mesmo Dockerfile (ADR-0002, D9; ADR-0003, D11; ADR-0006, D1). O module é o
+        # caminho do módulo; o name, só o nome do check (ADR-0005, D8).
         include:
           - name: api
             module: apps/api
             image: encurtador-api
             http-port: 8080
             management-port: 8081
+          - name: redirect
+            module: apps/redirect
+            image: encurtador-redirect
+            http-port: 8060
+            management-port: 8061
           - name: auth-server
             module: apps/auth-server
             image: encurtador-auth-server
@@ -72,7 +77,8 @@ jobs:
           --build-arg MANAGEMENT_PORT=${{ matrix.management-port }}
           -t ${{ matrix.image }}:ci .
 
-  # A stack inteira do compose (ADR-0003, D12; ADR-0004, D11): login pela CLI e o painel no Playwright, com axe.
+  # A stack inteira do compose (ADR-0003, D12; ADR-0004, D11; ADR-0006): login pela CLI e o painel no Playwright, com
+  # axe. Os dois conferem que o link curto sai do serviço de redirecionamento, e não da API.
   e2e:
     name: Ponta a ponta
     runs-on: ubuntu-latest
@@ -90,7 +96,7 @@ jobs:
       - name: Sobe a stack
         run: docker compose --profile app up -d --build --wait --wait-timeout 300
 
-      - name: Login pela CLI → link → redirecionamento → estatística
+      - name: Login pela CLI → link → redirecionamento → estatística → remoção
         run: e2e/cli/ponta-a-ponta.sh
 
       - name: Painel no Playwright

@@ -1,6 +1,6 @@
 package br.com.encurtador.analytics.infra;
 
-import br.com.encurtador.analytics.LinkClicked;
+import br.com.encurtador.clicks.LinkClicked;
 import org.jspecify.annotations.Nullable;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;

@@ -50,6 +50,14 @@
         </dependency>
         <dependency>
             <groupId>br.com.encurtador</groupId>
+            <artifactId>encurtador-url-clicks</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>br.com.encurtador</groupId>
+            <artifactId>encurtador-url-link-cache</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>br.com.encurtador</groupId>
             <artifactId>encurtador-url-analytics</artifactId>
         </dependency>
         <dependency>

@@ -1,6 +1,6 @@
 package br.com.encurtador.analytics.infra;
 
-import br.com.encurtador.analytics.LinkClicked;
+import br.com.encurtador.clicks.LinkClicked;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;

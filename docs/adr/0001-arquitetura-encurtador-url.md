@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-10-31), após a revisão 1 · plano de implementação concluído (F0 a F6) · D2 e D9 substituídas pelos ADRs 0002 e 0003 (aceitos em 2026-11-02; o 0002 implementado, o 0003 pendente); as decisões ajustadas por eles têm uma nota no início · o ADR-0004 (frontend, aceito em 2026-11-04, implementação pendente) ajusta §4, RF02, R8, D8, D11, D12, D13 e D14 |
+| Status | **Aceito** (2026-10-31), após a revisão 1 · plano de implementação concluído (F0 a F6) · D2 e D9 substituídas pelos ADRs 0002 e 0003 (aceitos em 2026-11-02; o 0002 implementado, o 0003 pendente); as decisões ajustadas por eles têm uma nota no início · o ADR-0004 (frontend, aceito em 2026-11-04, implementação pendente) ajusta §4, RF02, R8, D8, D11, D12, D13 e D14 · o ADR-0006 (serviço de redirecionamento, 2026-11-07) ajusta D4, D7, D8, D11, D13 e D14 |
 | Data | 2026-10-31 (rev. 1 e aceite no mesmo dia) |
 | Escopo | Reescrita completa do projeto `Antony-Reis/encurtadorUrl` |
 | Stack | Java 25 · Spring Boot 4.1.2 · PostgreSQL 18 · Redis 8 · Kafka 4.4 |
@@ -338,6 +338,9 @@ Códigos curtos **não são controle de acesso**: com 10⁷ links, um palpite al
 
 ### D4 — Rota e semântica do redirecionamento
 
+> **Ajustada pelo ADR-0006** (2026-11-07): `GET|HEAD /{code}` sai da API e é atendido pelo serviço `redirect`, na
+> porta 8060; a semântica (302, 404, 410, `no-store`, HEAD sem clique) não muda.
+
 **Opções de status.** 301/308 (permanente) vs 302/307 (temporário).
 
 **Decisão.**
@@ -463,6 +466,9 @@ PostgreSQL real (Testcontainers), nunca H2.
 
 ### D7 — Cache de resolução (Redis)
 
+> **Ajustada pelo ADR-0006** (D3, D4): o cache fica no módulo `link-cache`; o serviço `redirect` lê e preenche, e a
+> API grava o tombstone de remoção no mesmo Redis, depois do commit. Formato e TTLs não mudam.
+
 **Opções.** `@Cacheable` (abstração do Spring) · cache-aside explícito · cache local (Caffeine) · sem cache.
 
 **Decisão.** Cache-aside explícito, de propriedade do módulo `redirect`.
@@ -501,6 +507,9 @@ com clareza. Um L1 local (Caffeine) fica como otimização futura.
 
 > **Ajustada pelo ADR-0004** (D7): o `analytics` ganha `GET /api/v1/stats`, com as estatísticas dos links não
 > removidos do usuário.
+
+> **Ajustada pelo ADR-0006** (D3, D5): a fila em memória e o `ClickSender` ficam no serviço `redirect`
+> (`app.clicks.*`); o evento `LinkClicked`, no módulo `clicks`; o consumidor, a DLT e os tópicos continuam na API.
 
 **Opções.**
 
@@ -679,6 +688,9 @@ precisam informar domínios internacionais em Punycode (limitação documentada;
 > **Ajustada pelo ADR-0004** (D4, D7): entram o limite `user-stats`, por usuário, e o do início do login no BFF, por
 > IP.
 
+> **Ajustada pelo ADR-0006** (D6): o limite `redirect` é aplicado pelo serviço `redirect` a todo `GET` e `HEAD`,
+> exceto as probes.
+
 **Opções.** Bucket4j com backend Redis · janela fixa própria em Redis · rate limit apenas no proxy/gateway.
 
 **Decisão.** Janela fixa própria em Redis, com `INCR` + `PEXPIRE` atômicos via script Lua de poucas linhas, protegido
@@ -765,6 +777,9 @@ Formatos:
 > **Ajustada pelo ADR-0004** (D12): o BFF segue a mesma observabilidade e nunca registra cookies, tokens nem corpos
 > de requisição.
 
+> **Ajustada pelo ADR-0006** (D5): o health `kafkaPublish` e o histograma de `shortener.redirect` passam para o
+> serviço `redirect` (actuator na 8061).
+
 **Decisão.**
 - **Porta de gestão separada** (`management.server.port=8081`, publicada só internamente) com `health`, `info`,
   `metrics` e `prometheus`. Na porta pública ficam apenas `/livez` e `/readyz`.
@@ -792,6 +807,9 @@ Formatos:
 >
 > **Ajustada pelo ADR-0004** (D11): entram os testes do frontend (Vitest, com gate próprio de 80%), do BFF e de ponta
 > a ponta (Playwright); os cenários 8 e 12 continuam fora, porque o refresh token do `encurtador-web` não rotaciona.
+
+> **Ajustada pelo ADR-0006** (D7): os cenários do caminho quente (2 a 6, 10, o clique do 14, 15 e o redirect do 16)
+> rodam em `apps/redirect`; a API testa o consumidor e o tombstone de remoção.
 
 **Decisão.** Pirâmide com infraestrutura real nos testes de integração:
 

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-11-06), após a revisão 1 (§8) · **implementado** (O0 a O2, 2026-11-06; notas de implementação no §9; o critério 8 do D9 depende do primeiro run do CI) |
+| Status | **Aceito** (2026-11-06), após a revisão 1 (§8) · **implementado** (O0 a O2, 2026-11-06; notas de implementação no §9; o critério 8 do D9 depende do primeiro run do CI) · D1 ajustada pelo ADR-0006 |
 | Data | 2026-11-06 |
 | Escopo | Pastas da raiz do repositório: onde ficam as aplicações, o frontend, os testes de ponta a ponta, as ferramentas de build e os arquivos de ambiente. Nenhum comportamento da aplicação muda |
 | Ajusta | ADR-0002 D1, D2, D7, D8 e D9; ADR-0003 D2, D8, D11 e D12; ADR-0004 D2, D11 e D12 |
@@ -42,6 +42,9 @@ Problemas que isso causa na leitura:
 ## 2. Decisões
 
 ### D1 — Layout por papel
+
+> **Ajustada pelo ADR-0006** (2026-11-07): `apps/` ganha `redirect/` (porta 8060, com o código que era de
+> `modules/redirect`); `modules/` perde `redirect/` e ganha `clicks/` e `link-cache/`.
 
 ```text
 encurtador-url/

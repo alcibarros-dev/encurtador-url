@@ -1,0 +1,97 @@
+# Serviço de redirecionamento (ADR-0006). Configuração padrão (produção): endereços de infraestrutura vêm de variáveis
+# de ambiente. Perfis: "local" (application-local.yml) e "test" (src/test/resources).
+spring:
+  application:
+    name: encurtador-redirect
+  threads:
+    virtual:
+      enabled: true
+  docker:
+    compose:
+      enabled: false
+  datasource:
+    hikari:
+      # Só leitura: o PostgreSQL recusa qualquer escrita por este pool. O schema é da API (ADR-0006, D2). Sem o
+      # readOnlyMode=always, o driver ignora o read-only nas conexões em autocommit, que são todas as daqui.
+      read-only: true
+      data-source-properties:
+        readOnlyMode: always
+      # Em milissegundos. Curto para não enfileirar requisições quando o Redis cai e tudo vai ao banco (ADR-0001, D7).
+      connection-timeout: 2000
+  data:
+    redis:
+      timeout: 100ms
+      connect-timeout: 200ms
+  kafka:
+    producer:
+      acks: all
+      compression-type: lz4
+      properties:
+        enable.idempotence: true
+        # O padrão de 60 s travaria o ClickSender sem metadados do tópico (ADR-0001, D8).
+        max.block.ms: 2000
+        delivery.timeout.ms: 30000
+        # O Kafka exige delivery.timeout.ms >= linger.ms + request.timeout.ms; o padrão (30 s) não caberia.
+        request.timeout.ms: 10000
+        linger.ms: 20
+  web:
+    locale: pt_BR
+    locale-resolver: fixed
+
+server:
+  port: 8060
+  shutdown: graceful
+
+management:
+  server:
+    port: 8061
+  metrics:
+    distribution:
+      # Buckets no Prometheus para acompanhar o p99 do redirecionamento (RNF01).
+      percentiles-histogram:
+        shortener.redirect: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  info:
+    java:
+      enabled: true
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+        add-additional-paths: true
+      group:
+        liveness:
+          include: livenessState
+          show-details: never
+        # Redis e Kafka ficam de fora: o redirecionamento continua sem eles (RNF02).
+        readiness:
+          include: readinessState,db
+          show-details: never
+
+logging:
+  structured:
+    format:
+      console: ecs
+
+app:
+  # O próprio endereço público: é o prefixo dos links curtos que a API devolve (ADR-0006, D1).
+  base-url: http://localhost:8060
+  # Precisam ser os mesmos da API, que grava o tombstone de remoção (ADR-0006, D4).
+  cache:
+    max-ttl: 10m
+    tombstone-ttl: 1h
+  redis-guard:
+    failure-threshold: 5
+    open-duration: 5s
+  # Janela fixa por IP (ADR-0001, D11), para todo GET e HEAD (ADR-0006, D6). Atrás de proxy, configure
+  # server.forward-headers-strategy=native e server.tomcat.remoteip.internal-proxies com os proxies confiáveis.
+  rate-limit:
+    redirect: { requests: 600, window: 1m }
+  clicks:
+    # Por instância: é o que se perde se ela cair antes de publicar (ADR-0001, D8).
+    buffer-capacity: 10000
+    topic: link-clicks

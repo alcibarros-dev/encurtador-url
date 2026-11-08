@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aceito** (2026-11-02), após a revisão 1 (§8) · implementado (M0 a M4, 2026-11-02; notas no §8) · D1, D2, D4, D5, D7, D8 e D9 ajustadas pelo ADR-0003 · D1, D2, D7 e D9 ajustadas pelo ADR-0004 · D1, D2, D7, D8 e D9 ajustadas pelo ADR-0005 |
+| Status | **Aceito** (2026-11-02), após a revisão 1 (§8) · implementado (M0 a M4, 2026-11-02; notas no §8) · D1, D2, D4, D5, D7, D8 e D9 ajustadas pelo ADR-0003 · D1, D2, D7 e D9 ajustadas pelo ADR-0004 · D1, D2, D7, D8 e D9 ajustadas pelo ADR-0005 · D1, D2 e D9 ajustadas pelo ADR-0006 |
 | Data | 2026-11-02 |
 | Escopo | Divisão do build em módulos Maven, separação entre plataforma e negócio, contratos de segurança |
 | Substitui | ADR-0001 D2 (estrutura física e regras de dependência). Ajusta ADR-0001 D9, D11, D14 e D15 |
@@ -55,6 +55,9 @@ Três coisas mudaram:
 > **Ajustada pelo ADR-0005** (2026-11-06): o layout passa a ser por papel: `apps/` (com `api`, o `app` renomeado,
 > `auth-server` e `bff`), `frontend/web`, `e2e/`, `tools/coverage` e `infra/`; `platform/` e `modules/` não mudam.
 
+> **Ajustada pelo ADR-0006** (2026-11-07): entram `apps/redirect` (o serviço de redirecionamento, com o código que
+> era de `modules/redirect`) e os módulos `modules/clicks` e `modules/link-cache`.
+
 ```text
 encurtador-url/
 ├── pom.xml                       agregador (packaging pom), herda spring-boot-starter-parent
@@ -96,6 +99,10 @@ Regras do layout:
 >
 > **Ajustada pelo ADR-0005** (2026-11-06): o artefato `encurtador-url-app` vira `encurtador-url-api`; as regras de
 > dependência não mudam.
+
+> **Ajustada pelo ADR-0006** (D3): o módulo `redirect` sai de `modules/`, e o código vai para a aplicação
+> `apps/redirect`, que depende de `link-cache`, `clicks`, `ratelimit` e `shared`; `analytics` → também `clicks`; a API
+> deixa de depender do `redirect` e passa a depender do `link-cache`.
 
 | Módulo | Depende de |
 |---|---|
@@ -239,6 +246,9 @@ não pode apagar migrações já aplicadas do histórico; e o Flyway não precis
 > **Ajustada pelo ADR-0005** (2026-11-06): `-pl apps/api -am`; o `MODULE` do Dockerfile é o caminho do módulo (padrão
 > `apps/api`); a imagem da API se chama `encurtador-api`; o diretório de trabalho do `spring-boot:run` vem de
 > `${maven.multiModuleProjectDirectory}`, declarado uma vez no pom raiz.
+
+> **Ajustada pelo ADR-0006** (D1): quarta imagem, `encurtador-redirect` (`MODULE=apps/redirect`, portas 8060 e
+> 8061), e `-pl apps/redirect -am`.
 
 - **Pom raiz:** versões de terceiros (as de hoje), `dependencyManagement` dos módulos internos com
   `${project.version}`, configuração comum de plugins (Surefire com o agente do Mockito, JaCoCo `prepare-agent`,

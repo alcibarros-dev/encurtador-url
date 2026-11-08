@@ -1,5 +1,6 @@
 package br.com.encurtador.analytics;
 
+import br.com.encurtador.clicks.LinkClicked;
 import br.com.encurtador.link.application.LinkService;
 import br.com.encurtador.support.ApiClient.Response;
 import br.com.encurtador.support.ApiClient;
@@ -20,15 +21,10 @@ import org.springframework.kafka.core.KafkaTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +36,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Do redirecionamento às estatísticas, com o Kafka de verdade (ADR-0001, D8; cenários 1, 7, 10 e 14 do D14).
+ * Do tópico às estatísticas, com o Kafka de verdade (ADR-0001, D8; cenários 1, 7 e 10 do D14). Os cliques chegam como
+ * o serviço de redirecionamento os publica; a publicação é testada nele (ADR-0006, D5 e D7).
  */
 @IntegrationTest
 class ClickPipelineIntegrationTest {
@@ -74,7 +71,6 @@ class ClickPipelineIntegrationTest {
     MutableClock clock;
 
     private ApiClient api;
-    private final HttpClient http = HttpClient.newHttpClient();
 
     @BeforeEach
     void setUp() {
@@ -83,14 +79,15 @@ class ClickPipelineIntegrationTest {
 
     /** Cenário 1. */
     @Test
-    void clickOnARedirectShowsUpInTheStats() throws Exception {
+    void publishedClickShowsUpInTheStats() throws Exception {
         // O usuário chega com o token do auth-server; a conta nasce no primeiro acesso (ADR-0003, D7 e D12).
         String token = accounts.token(UUID.randomUUID().toString());
         String code = api.post("/api/v1/links", Map.of("url", "https://exemplo.com/artigo"), token).text("code");
+        long linkId = idOf(code);
 
-        HttpResponse<Void> redirect = http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/" + code))
-                .header("Referer", "https://t.co/abc123?utm=segredo").GET().build(), HttpResponse.BodyHandlers.discarding());
-        assertThat(redirect.statusCode()).isEqualTo(302);
+        // O que o redirect publica num GET com Referer: só o host fica (RNF08).
+        send(linkId, json.writeValueAsString(LinkClicked.fromRedirect(UUID.randomUUID(), linkId, clock.instant(),
+                "https://t.co/abc123?utm=segredo")));
 
         String statsPath = "/api/v1/links/" + code + "/stats";
         await().atMost(PIPELINE).until(() -> api.get(statsPath, token).body().path("totalClicks").asLong() == 1);
@@ -107,34 +104,14 @@ class ClickPipelineIntegrationTest {
     @Test
     void occurredAtIsTheRedirectInstantNotTheConsumptionInstant() throws Exception {
         long linkId = newLinkId();
-        Instant before = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        assertThat(api.get("/" + codeOf(linkId), null).status()).isEqualTo(302);
-        Instant after = clock.instant();
-        await().atMost(PIPELINE).until(() -> clicksOf(linkId) == 1);
-        assertThat(occurredAtOf(linkId)).isBetween(before, after);
 
         // Evento atrasado três dias (ex.: ficou parado no Kafka): o consumidor não troca o instante pelo dele.
         Instant threeDaysAgo = Instant.parse("2026-10-29T08:15:30.123456Z");
         LinkClicked late = new LinkClicked(1, UUID.randomUUID(), linkId, threeDaysAgo, null);
         send(linkId, json.writeValueAsString(late));
-        await().atMost(PIPELINE).until(() -> clicksOf(linkId) == 2);
+        await().atMost(PIPELINE).until(() -> clicksOf(linkId) == 1);
         assertThat(jdbc.sql("select occurred_at from click_events where event_id = :id").param("id", late.eventId())
                 .query(OffsetDateTime.class).single().toInstant()).isEqualTo(threeDaysAgo);
-    }
-
-    /** Cenário 14 (parte do clique): HEAD redireciona, mas não conta. */
-    @Test
-    void headIsNotAClick() {
-        long linkId = newLinkId();
-        String code = codeOf(linkId);
-
-        assertThat(api.head("/" + code).status()).isEqualTo(302);
-        assertThat(api.head("/" + code).status()).isEqualTo(302);
-        assertThat(api.get("/" + code, null).status()).isEqualTo(302);
-
-        // Mesma chave, mesma partição e fila FIFO: se um HEAD tivesse gerado clique, ele chegaria antes do GET.
-        await().atMost(PIPELINE).until(() -> clicksOf(linkId) >= 1);
-        assertThat(clicksOf(linkId)).isEqualTo(1);
     }
 
     /** Cenário 7: entrega repetida gera um único registro. */
@@ -178,7 +155,7 @@ class ClickPipelineIntegrationTest {
 
         // O consumidor não travou na mensagem envenenada.
         long linkId = newLinkId();
-        api.get("/" + codeOf(linkId), null);
+        send(linkId, json.writeValueAsString(new LinkClicked(1, UUID.randomUUID(), linkId, clock.instant(), null)));
         await().atMost(PIPELINE).until(() -> clicksOf(linkId) == 1);
     }
 
@@ -216,21 +193,15 @@ class ClickPipelineIntegrationTest {
 
     private long newLinkId() {
         long owner = accounts.create().id();
-        String code = links.create(owner, "https://exemplo.com/", null, null).code();
-        return jdbc.sql("select id from links where code = :code").param("code", code).query(Long.class).single();
+        return idOf(links.create(owner, "https://exemplo.com/", null, null).code());
     }
 
-    private String codeOf(long linkId) {
-        return jdbc.sql("select code from links where id = :id").param("id", linkId).query(String.class).single();
+    private long idOf(String code) {
+        return jdbc.sql("select id from links where code = :code").param("code", code).query(Long.class).single();
     }
 
     private long clicksOf(long linkId) {
         return jdbc.sql("select count(*) from click_events where link_id = :id").param("id", linkId)
                 .query(Long.class).single();
-    }
-
-    private Instant occurredAtOf(long linkId) {
-        return jdbc.sql("select occurred_at from click_events where link_id = :id").param("id", linkId)
-                .query(OffsetDateTime.class).single().toInstant();
     }
 }

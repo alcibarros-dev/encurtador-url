@@ -15,9 +15,6 @@ import java.util.Optional;
  */
 public interface LinkRepository extends Repository<Link, Long>, LinkWrites {
 
-    /** Qualquer status: o redirecionamento distingue removido (410) de inexistente (404). */
-    Optional<Link> findByCode(String code);
-
     /** Toda consulta da API filtra pelo dono: link de outro usuário é indistinguível de link inexistente (D9). */
     Optional<Link> findByCodeAndOwnerIdAndStatus(String code, long ownerId, LinkStatus status);
 

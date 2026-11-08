@@ -21,14 +21,6 @@ class LinkLookupService implements LinkLookup {
     }
 
     @Override
-    public Optional<LinkSnapshot> findByCode(String code) {
-        if (!ShortCode.isWellFormed(code)) {
-            return Optional.empty();
-        }
-        return links.findByCode(code).map(LinkLookupService::snapshot);
-    }
-
-    @Override
     public Optional<LinkSnapshot> findOwned(String code, long ownerId) {
         if (!ShortCode.isWellFormed(code)) {
             return Optional.empty();

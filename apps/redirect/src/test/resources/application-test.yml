@@ -1,0 +1,23 @@
+# Perfil dos testes de integração: a infraestrutura vem do Testcontainers (@ServiceConnection).
+spring:
+  flyway:
+    # O schema da API, lido da pasta dela: a aplicação não tem migrações (ADR-0006, D2 e D7).
+    locations: filesystem:../api/src/main/resources/db/migration
+
+management:
+  server:
+    port: 0
+
+logging:
+  structured:
+    format:
+      console: ""
+
+app:
+  # Curto para que o disjuntor feche logo depois dos testes de degradação, sem atrasar as classes seguintes.
+  redis-guard:
+    open-duration: 1s
+  # Todos os testes saem do mesmo IP: com o limite real, uma classe esgotaria a cota da seguinte. O teste do rate limit
+  # preenche o contador até o limite em vez de depender deste número.
+  rate-limit:
+    redirect: { requests: 1000000 }

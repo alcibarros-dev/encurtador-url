@@ -5,7 +5,8 @@ const slowMo = Number(process.env['SLOW_MO'] ?? 0);
 
 /**
  * Ponta a ponta do painel contra a stack do compose (ADR-0004, D11): suba antes com
- * `docker compose --profile app up -d --build`. PANEL_URL muda o endereço do painel.
+ * `docker compose --profile app up -d --build`. PANEL_URL muda o endereço do painel; REDIRECT_URL e API_URL, os do
+ * serviço de redirecionamento e da API (ADR-0006).
  */
 export default defineConfig({
   testDir: './tests',

@@ -73,7 +73,7 @@ class SecurityIntegrationTest {
         HttpResponse<String> healthOnPublicPort = get(port, "/actuator/health", null);
 
         assertThat(health.statusCode()).isEqualTo(200);
-        assertThat(health.body()).contains("\"db\"", "\"redis\"", "\"kafkaPublish\"");
+        assertThat(health.body()).contains("\"db\"", "\"redis\"");
         assertThat(prometheus.statusCode()).isEqualTo(200);
         assertThat(prometheus.body()).contains("jvm_memory_used_bytes");
         assertThat(healthOnPublicPort.statusCode()).isNotEqualTo(200);
@@ -89,6 +89,12 @@ class SecurityIntegrationTest {
         assertThat(response.headers().firstValue("Content-Type")).hasValue("application/problem+json");
         assertThat(response.body()).contains("\"code\":\"UNAUTHENTICATED\"", "\"status\":401",
                 "\"title\":\"Não autenticado\"", "\"instance\":\"/api/v1/qualquer\"");
+    }
+
+    /** O redirecionamento é do serviço apps/redirect: aqui, a raiz é uma rota protegida como as outras (ADR-0006). */
+    @Test
+    void shortCodesAreNotRedirectedByTheApi() throws Exception {
+        assertThat(get(port, "/aZ3kP9q", null).statusCode()).isEqualTo(401);
     }
 
     @Test

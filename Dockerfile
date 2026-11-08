@@ -2,7 +2,7 @@
 # Imagem de uma aplicação do repositório (ADR-0001, D15; ADR-0002, D9; ADR-0005, D7): build com o Maven Wrapper,
 # runtime só com a JRE e usuário sem privilégios. MODULE é o caminho do módulo da aplicação.
 # Uso: docker build -t encurtador-api .                                 (MODULE=apps/api, o padrão)
-#      docker build --build-arg MODULE=<caminho do módulo> -t <imagem> .   (apps/auth-server, apps/bff)
+#      docker build --build-arg MODULE=<caminho do módulo> -t <imagem> .   (apps/redirect, apps/auth-server, apps/bff)
 
 FROM eclipse-temurin:25.0.5_8-jdk-noble AS build
 ARG MODULE=apps/api
@@ -50,14 +50,14 @@ COPY --from=build /build/extracted/snapshot-dependencies/ ./
 COPY --from=build /build/extracted/application/ ./
 
 USER app:app
-# Na API, 8080: rotas da API e redirecionamento; 8081: actuator completo, só para a rede interna (D13). No
-# auth-server, 8090 e 8091; no BFF, 8070 e 8071.
+# Na API, 8080: rotas da API; 8081: actuator completo, só para a rede interna (D13). No redirect, 8060 e 8061
+# (ADR-0006, D1); no auth-server, 8090 e 8091; no BFF, 8070 e 8071.
 EXPOSE ${HTTP_PORT} ${MANAGEMENT_PORT}
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError" \
     HEALTHCHECK_PORT=${HTTP_PORT}
 
 # /livez, e não /actuator/health: Redis e Kafka entram no health completo, e a queda deles não pode reiniciar a
-# aplicação, que continua redirecionando sem eles (D13, RNF02).
+# aplicação, que continua funcionando sem eles (D13, RNF02).
 HEALTHCHECK --interval=10s --timeout=3s --start-period=60s --retries=3 \
     CMD curl -fsS "http://localhost:${HEALTHCHECK_PORT}/livez" > /dev/null || exit 1
 

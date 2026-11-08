@@ -4,7 +4,7 @@ import { Link, LinkStats, UserStats } from '../app/core/api/models';
 export function aLink(overrides: Partial<Link> = {}): Link {
   return {
     code: 'meu-artigo',
-    shortUrl: 'http://localhost:8080/meu-artigo',
+    shortUrl: 'http://localhost:8060/meu-artigo',
     targetUrl: 'https://exemplo.com/artigo',
     status: 'ACTIVE',
     createdAt: '2026-10-01T12:00:00Z',

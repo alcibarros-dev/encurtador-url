@@ -12,7 +12,7 @@ public final class ShortCode {
 
     public static final int MAX_LENGTH = 32;
 
-    /** Forma de todo código; também é o padrão da rota de redirecionamento. */
+    /** Forma de todo código; o serviço de redirecionamento usa uma cópia na rota, conferida por teste (ADR-0006). */
     public static final String PATTERN = "[A-Za-z0-9_-]{4,32}";
 
     private static final Pattern WELL_FORMED = Pattern.compile(PATTERN);

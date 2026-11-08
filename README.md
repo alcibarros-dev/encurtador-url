@@ -8,7 +8,9 @@ Kafka, feita a partir de ADRs revisados antes da primeira linha de código:
 - [ADR-0003](docs/adr/0003-servidor-de-autorizacao.md): servidor de autorização com o Spring Authorization Server
   (implementado);
 - [ADR-0004](docs/adr/0004-frontend-angular.md): painel web em Angular, atrás de um BFF (implementado);
-- [ADR-0005](docs/adr/0005-organizacao-do-repositorio.md): organização do repositório por papel (implementado).
+- [ADR-0005](docs/adr/0005-organizacao-do-repositorio.md): organização do repositório por papel (implementado);
+- [ADR-0006](docs/adr/0006-servico-de-redirecionamento.md): redirecionamento como serviço próprio, que escala sem a
+  API (implementado).
 
 **O que ele faz**
 
@@ -20,7 +22,8 @@ Kafka, feita a partir de ADRs revisados antes da primeira linha de código:
 - Links com código aleatório de 7 caracteres ou alias próprio, validade de 1 minuto a 365 dias e cota de 100 links
   ativos por usuário. O destino é validado como entrada hostil: só `http`/`https`, sem credenciais, sem IP privado
   em nenhuma forma, sem loop para o próprio encurtador.
-- `GET /{code}` responde 302 a partir do cache e continua respondendo com o Redis ou o Kafka fora do ar.
+- `GET /{code}` responde 302 a partir do cache, num serviço próprio que escala sem a API, e continua respondendo com
+  o Redis, o Kafka ou a API fora do ar.
 - Estatísticas por link e de todos os links do usuário: total, série diária num fuso escolhido, principais links e
   referers. Sem IP nem user-agent: do Referer, só o host.
 - Rate limit por IP, usuário, e-mail ou cliente OAuth, com 429 e `Retry-After`.
@@ -35,14 +38,18 @@ Chart.js · Vitest · Playwright com axe-core.
 ## Arquitetura
 
 Monólito modular dividido em módulos Maven ([ADR-0002](docs/adr/0002-modulos-maven.md)): plataforma técnica de um
-lado, negócio do outro, e uma aplicação que junta tudo, a API. Ao lado dela, o servidor de autorização, uma aplicação
-separada no mesmo repositório ([ADR-0003](docs/adr/0003-servidor-de-autorizacao.md)). Cada pasta da raiz tem um papel
-([ADR-0005](docs/adr/0005-organizacao-do-repositorio.md)):
+lado, negócio do outro, e uma aplicação que junta o negócio, a API. Ao lado dela, no mesmo repositório, três
+aplicações separadas: o servidor de autorização ([ADR-0003](docs/adr/0003-servidor-de-autorizacao.md)), o BFF do
+painel ([ADR-0004](docs/adr/0004-frontend-angular.md)) e o serviço de redirecionamento, que atende os links curtos e
+escala sem a API ([ADR-0006](docs/adr/0006-servico-de-redirecionamento.md)). A API e o redirect combinam só dois
+contratos, o cache no Redis e o evento de clique no Kafka, e o redirect lê a tabela `links` da API, só para leitura.
+Cada pasta da raiz tem um papel ([ADR-0005](docs/adr/0005-organizacao-do-repositorio.md)):
 
 ```text
 encurtador-url/
 ├── apps/               o que roda como processo e vira imagem
-│   ├── api/            API e redirecionamento (8080): classe principal, configuração, migrações, testes de integração
+│   ├── api/            API (8080): links, estatísticas, contas; classe principal, migrações, testes de integração
+│   ├── redirect/       links curtos GET /{code} (8060): cache-aside, leitura no PostgreSQL, cliques → Kafka
 │   ├── auth-server/    servidor de autorização (8090): login, cadastro, troca de senha, tokens RS256, JWKS
 │   └── bff/            BFF do painel (8070): entrega a SPA, login OIDC, sessão e repasse de /api/** à API
 ├── frontend/
@@ -50,15 +57,16 @@ encurtador-url/
 ├── modules/            negócio
 │   ├── account/        contas da API: o sub do token vira o id local, com criação no primeiro acesso
 │   ├── link/           criação, listagem e remoção de links; validação do destino
-│   ├── analytics/      fila em memória → Kafka → consumidor idempotente → estatísticas
-│   └── redirect/       GET /{code}: cache-aside no Redis, tombstones, invalidação após o commit
+│   ├── analytics/      Kafka → consumidor idempotente → estatísticas
+│   ├── clicks/         o evento de clique do tópico link-clicks, contrato entre o redirect e o analytics
+│   └── link-cache/     o cache link:v1:{code} no Redis, contrato entre o redirect e a API
 ├── platform/           técnico
 │   ├── shared/         erros RFC 9457, tempo, UUIDv7, disjuntor do Redis
 │   ├── ratelimit/      janela fixa no Redis (Lua) e o filtro que aplica as regras de cada módulo
 │   ├── security-api/   contratos de segurança, sem framework: @CurrentUser, UserIdResolver, PublicRoutes
 │   └── security/       validação do token pelo JWKS, cadeia de filtros, respostas 401, 403 e 503
 ├── e2e/                testes da stack inteira, sobre o compose
-│   ├── cli/            ponta-a-ponta.sh: cadastro, login da CLI, link, redirecionamento e estatística
+│   ├── cli/            ponta-a-ponta.sh: cadastro, login da CLI, link, redirecionamento, estatística e remoção
 │   └── playwright/     o painel no navegador, com o axe
 ├── tools/
 │   └── coverage/       sem código: o gate de cobertura de todos os módulos
@@ -82,9 +90,11 @@ Dependências entre módulos:
 | `security` | `security-api`, `shared` |
 | `account` | `security-api` |
 | `link` | `security-api`, `ratelimit`, `shared` |
-| `analytics` | `link`, `security-api`, `ratelimit`, `shared` |
-| `redirect` | `link`, `analytics`, `security-api`, `ratelimit`, `shared` |
+| `clicks` | — |
+| `link-cache` | `shared` |
+| `analytics` | `clicks`, `link`, `security-api`, `ratelimit`, `shared` |
 | `api` | todos os de plataforma e de negócio |
+| `redirect` (`apps/redirect`) | `link-cache`, `clicks`, `ratelimit`, `shared` |
 | `auth-server` | `shared`, `ratelimit` |
 | `web` | — (só pacotes do npm) |
 | `bff` | `web`, `shared`, `ratelimit` |
@@ -123,22 +133,23 @@ A API busca o JWKS sob demanda e o guarda em cache: um `kid` novo dispara uma bu
 o `auth-server` fora, as chaves já obtidas continuam valendo por até um dia. Sem nenhuma chave utilizável, a requisição
 autenticada responde 503 `AUTH_UNAVAILABLE`.
 
-Caminho do redirecionamento:
+Caminho do redirecionamento, no serviço `redirect` ([ADR-0006](docs/adr/0006-servico-de-redirecionamento.md)):
 
 ```text
-[ Usuário abre o link curto: GET /{code} ]
+[ Usuário abre o link curto: GET http://localhost:8060/{code} ]
              │
              ▼
 [ Rate limit por IP, no Redis ] ──► acima de 600 por minuto: 429 com Retry-After
              │                      (com o Redis fora, deixa passar)
              ▼
-[ Cache link:v1:{code}, no Redis ] ──► miss, erro ou disjuntor aberto: busca no PostgreSQL
+[ Cache link:v1:{code}, no Redis ] ──► miss, erro ou disjuntor aberto: lê a tabela links da API, só leitura
              │                         (só no miss, grava no cache com SET NX: até 10 min, tombstone de 1 h)
              ▼
 [ Resultado da resolução ]
              │
-             ├───► 1. Ativo e no prazo, pelo relógio da API: 302 com Location e Cache-Control: private, no-store
-             │        └──► clique, só no GET, sem esperar: fila em memória ──► thread própria ──► Kafka ──► click_events
+             ├───► 1. Ativo e no prazo, pelo relógio do serviço: 302 com Location e Cache-Control: private, no-store
+             │        └──► clique, só no GET, sem esperar: fila em memória ──► thread própria ──► Kafka
+             │                                                               └──► consumidor da API ──► click_events
              │
              ├───► 2. Expirado ou removido: 410 LINK_EXPIRED ou LINK_DELETED, sem ir ao banco quando há tombstone
              │
@@ -146,10 +157,13 @@ Caminho do redirecionamento:
 ```
 
 O Redis fica atrás de um disjuntor: com timeouts de 100 ms e 5 falhas seguidas, ele é ignorado por 5 s, e o
-redirecionamento segue pelo banco. O redirect nunca espera o Kafka. Os motivos de cada escolha, as alternativas
-descartadas e as notas de implementação de cada fase estão nos ADRs: o
-[0001](docs/adr/0001-arquitetura-encurtador-url.md) para a arquitetura, o [0002](docs/adr/0002-modulos-maven.md) para
-a divisão em módulos e o [0003](docs/adr/0003-servidor-de-autorizacao.md) para o servidor de autorização.
+redirecionamento segue pelo banco. O redirect nunca espera o Kafka nem a API: quando um link é removido, é a API que
+grava o tombstone no mesmo Redis, depois do commit. Para atender mais cliques, sobem mais instâncias do `redirect`
+atrás de um balanceador, sem mexer na API. Os motivos de cada escolha, as alternativas descartadas e as notas de
+implementação de cada fase estão nos ADRs: o [0001](docs/adr/0001-arquitetura-encurtador-url.md) para a arquitetura,
+o [0002](docs/adr/0002-modulos-maven.md) para a divisão em módulos, o
+[0003](docs/adr/0003-servidor-de-autorizacao.md) para o servidor de autorização e o
+[0006](docs/adr/0006-servico-de-redirecionamento.md) para o serviço de redirecionamento.
 
 ## Como rodar
 
@@ -159,8 +173,8 @@ fixada em `.mise.toml`.
 ### Desenvolvimento
 
 O perfil `local` sobe a infraestrutura do `compose.yaml` (PostgreSQL, Redis, Kafka e as ferramentas de inspeção) e
-liga o Swagger UI. São três aplicações, cada uma num terminal: o servidor de autorização, que emite os tokens, a API,
-que os valida, e o BFF, que serve o painel.
+liga o Swagger UI. São quatro aplicações, cada uma num terminal: o servidor de autorização, que emite os tokens, a
+API, que os valida, o redirect, que atende os links curtos, e o BFF, que serve o painel.
 
 ```bash
 ./mvnw -pl apps/auth-server -am spring-boot:run
@@ -171,10 +185,16 @@ que os valida, e o BFF, que serve o painel.
 ```
 
 ```bash
+./mvnw -pl apps/redirect -am spring-boot:run
+```
+
+```bash
 ./mvnw -pl apps/bff -am spring-boot:run
 ```
 
-As portas de cada aplicação e os endereços das ferramentas estão em [Endereços](#endereços).
+Num banco novo, suba a API antes do redirect: as migrações são dela, e até a primeira subida da API não existe a
+tabela `links` que o redirect lê. As portas de cada aplicação e os endereços das ferramentas estão em
+[Endereços](#endereços).
 
 Para mexer no Angular com recarga automática, o `ng serve` sobe o painel em http://localhost:4200, repassando `/api`,
 `/bff`, `/oauth2` e `/login` ao BFF (que precisa estar no ar). O Node é o 26, fixado no `.mise.toml`:
@@ -200,19 +220,22 @@ No IntelliJ, as Run Configurations vêm com o repositório, em `.idea/runConfigu
 |---|---|
 | `api (local)` | Roda `spring-boot:run -pl apps/api -am` pelo Maven na raiz, com o perfil Maven `local`: compila só a API e os módulos de que ela depende |
 | `api (local, debug)` | Sobe `EncurtadorApplication` direto pela IDE, no módulo `encurtador-url-api`, com o perfil `local`, para depurar com breakpoints |
+| `redirect (local)` | Roda `spring-boot:run -pl apps/redirect -am` pelo Maven na raiz, com o perfil Maven `local` |
+| `redirect (local, debug)` | Sobe `RedirectApplication` direto pela IDE, no módulo `encurtador-url-redirect`, com o perfil `local` |
 | `auth-server (local)` | Roda `spring-boot:run -pl apps/auth-server -am` pelo Maven na raiz, com o perfil Maven `local` |
 | `auth-server (local, debug)` | Sobe `AuthServerApplication` direto pela IDE, com o perfil `local` |
 | `bff (local)` | Roda `spring-boot:run -pl apps/bff -am` pelo Maven na raiz, com o perfil Maven `local` |
 | `bff (local, debug)` | Sobe `BffApplication` direto pela IDE, com o perfil `local` |
-| `stack (local)` | Sobe as três configurações Maven acima juntas |
+| `stack (local)` | Sobe as quatro configurações Maven acima juntas |
 
 Todas usam o JDK do projeto, que precisa ser o 25. Depois de uma mudança de pasta dos módulos (como a do ADR-0005),
 recarregue o projeto Maven na IDE (Maven → Reload All Maven Projects) para ela achar os módulos pelos nomes novos.
 
 ### Tudo em containers
 
-Os serviços `auth-server`, `api` e `bff` do compose constroem as imagens e sobem junto com a infraestrutura; o profile
-`app` é o das aplicações. O painel fica em http://localhost:8070. Em segundo plano, liberando o terminal:
+Os serviços `auth-server`, `api`, `redirect` e `bff` do compose constroem as imagens e sobem junto com a
+infraestrutura; o profile `app` é o das aplicações. O painel fica em http://localhost:8070, e os links curtos, em
+http://localhost:8060. Em segundo plano, liberando o terminal:
 
 ```bash
 docker compose --profile app up -d --build
@@ -246,9 +269,11 @@ entra por um secret do orquestrador. O segredo do cliente `encurtador-web`, do p
 desenvolvimento no compose; para usar outro, defina `AUTH_WEB_CLIENT_SECRET` num `.env` na raiz, que o compose lê
 sozinho e o Git ignora.
 
-Para conferir a stack inteira de ponta a ponta: pela CLI (cadastro, fluxo de dispositivo, link, redirecionamento e
-estatística) e pelo painel no Playwright (cadastro, links, o `GET /{code}` do link criado com o clique chegando às
-estatísticas, o 410 depois da remoção, troca de senha e saída, com o axe em cada página):
+Para conferir a stack inteira de ponta a ponta, as quatro aplicações juntas: pela CLI (cadastro, fluxo de
+dispositivo, link criado na API, redirecionamento no serviço `redirect`, clique nas estatísticas e o 410 depois da
+remoção) e pelo painel no Playwright (cadastro, links, o `shortUrl` apontando para o serviço `redirect`, o
+`GET /{code}` nele e o 401 na API, o clique chegando às estatísticas, o 410 depois da remoção, troca de senha e saída,
+com o axe em cada página). Os dois usam os endereços do compose; `API_URL` e `REDIRECT_URL` os trocam:
 
 ```bash
 e2e/cli/ponta-a-ponta.sh
@@ -301,14 +326,15 @@ para a operação.
 
 | Aplicação | Pública | Interna (actuator) |
 |---|---|---|
-| `api` | http://localhost:8080: API e links curtos | http://localhost:8081/actuator/health |
+| `api` | http://localhost:8080: API e Swagger UI | http://localhost:8081/actuator/health |
+| `redirect` | http://localhost:8060: os links curtos (`GET /{code}`) | http://localhost:8061/actuator/health |
 | `auth-server` | http://localhost:8090: login, cadastro (`/register`) e tokens | http://localhost:8091/actuator/health |
 | `bff` | http://localhost:8070: o painel | http://localhost:8071/actuator/health |
 
 - **Pública:** é por ela que o sistema funciona. Em produção, fica atrás de um proxy reverso com HTTPS.
-- **Interna:** o actuator responde sem login, com as métricas e o health completo, que na API inclui o Redis e o
-  Kafka. Nada do sistema depende dela, mas o monitoramento depende: em produção, só a rede interna deve alcançá-la,
-  nunca a internet. Detalhes em [Operação](#operação).
+- **Interna:** o actuator responde sem login, com as métricas e o health completo, que na API e no redirect inclui o
+  Redis e, no redirect, a publicação no Kafka (`kafkaPublish`). Nada do sistema depende dela, mas o monitoramento
+  depende: em produção, só a rede interna deve alcançá-la, nunca a internet. Detalhes em [Operação](#operação).
 - **Swagger UI:** http://localhost:8080/swagger-ui.html, na porta pública da API. O perfil `local` e o compose ligam a
   documentação, que a imagem deixa desligada por padrão. No perfil `local`, o botão Authorize faz login no
   `auth-server` pelo fluxo de código com PKCE, com o cliente `encurtador-dev`. No compose, que não tem esse cliente,
@@ -337,12 +363,17 @@ O pgAdmin, o redis-commander e o Kafdrop sobem junto com a infraestrutura do com
 
 - No Redis, a chave `link:v1:{code}` só aparece depois do primeiro acesso ao link curto, e nada sobrevive a uma
   reinicialização do container: ele roda sem persistência.
-- No Kafka, a aplicação cria os tópicos ao subir, e cada acesso a um link curto vira uma mensagem em `link-clicks`.
+- No Kafka, a API cria os tópicos ao subir, e cada acesso a um link curto vira uma mensagem em `link-clicks`,
+  publicada pelo redirect.
 
 ### Só a imagem
 
 ```bash
 docker build -t encurtador-api .
+```
+
+```bash
+docker build --build-arg MODULE=apps/redirect --build-arg HTTP_PORT=8060 --build-arg MANAGEMENT_PORT=8061 -t encurtador-redirect .
 ```
 
 ```bash
@@ -357,15 +388,18 @@ O Dockerfile serve para qualquer aplicação do repositório: `--build-arg MODUL
 padrão é `apps/api`), e `HTTP_PORT` e `MANAGEMENT_PORT` ajustam as portas do `EXPOSE` e do `HEALTHCHECK`.
 
 As imagens rodam como usuário sem privilégios, têm `HEALTHCHECK` em `/livez` e recebem a configuração por variáveis de
-ambiente. Todas usam `SPRING_DATA_REDIS_HOST` e `SPRING_DATA_REDIS_PORT`; a API e o `auth-server`, também
-`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD`. Além delas:
+ambiente. Todas usam `SPRING_DATA_REDIS_HOST` e `SPRING_DATA_REDIS_PORT`; a API, o redirect e o `auth-server`,
+também `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` e `SPRING_DATASOURCE_PASSWORD`. Além delas:
 
 | Aplicação | Variável | Exemplo |
 |---|---|---|
-| api | `APP_BASE_URL` | `https://encurta.dor` (prefixo do `shortUrl`; o encurtador recusa destinos para esse host) |
+| api | `APP_BASE_URL` | `https://encurta.dor`: o endereço público do redirect, prefixo do `shortUrl`; o encurtador recusa destinos para esse host |
 | api | `APP_JWT_ISSUER` | `https://auth.encurta.dor`: o `iss` exigido, a URL pública do `auth-server`, cujo host também não pode ser destino de link |
 | api | `APP_JWT_JWK_SET_URI` | `http://auth-server:8090/oauth2/jwks`: de onde vêm as chaves públicas, pela rede interna |
 | api | `SPRING_KAFKA_BOOTSTRAP_SERVERS` | `kafka:29092` |
+| redirect | `APP_BASE_URL` | `https://encurta.dor`: o mesmo da API |
+| redirect | `SPRING_KAFKA_BOOTSTRAP_SERVERS` | `kafka:29092` |
+| redirect | `SPRING_DATASOURCE_URL` | pode apontar para uma réplica de leitura: o redirect só lê a tabela `links` |
 | auth-server | `AUTH_ISSUER` | `https://auth.encurta.dor` (vai no `iss` dos tokens) |
 | auth-server | `AUTH_SIGNING_KEY_ID`, `AUTH_SIGNING_KEY_FILE` | `auth-2`, `file:/run/secrets/auth-signing-key.pem` (PEM PKCS#8; sem ele, a chave é gerada na subida) |
 | auth-server | `AUTH_WEB_CLIENT_SECRET` | segredo do cliente `encurtador-web` (`openssl rand -base64 32`) |
@@ -420,8 +454,10 @@ curl -s -X POST localhost:8080/api/v1/links -H "Authorization: Bearer $TOKEN" -H
   -d '{"url":"https://exemplo.com/artigo","alias":"meu-artigo"}'
 ```
 
+O link curto é do serviço de redirecionamento, na 8060:
+
 ```bash
-curl -si localhost:8080/meu-artigo
+curl -si localhost:8060/meu-artigo
 ```
 
 ```bash
@@ -434,6 +470,12 @@ curl -s "localhost:8080/api/v1/stats?tz=America/Sao_Paulo" -H "Authorization: Be
 
 ```bash
 curl -s -X DELETE "localhost:8080/api/v1/links/meu-artigo" -H "Authorization: Bearer $TOKEN"
+```
+
+Depois da remoção, o link curto responde 410 `LINK_DELETED` já no acesso seguinte:
+
+```bash
+curl -si localhost:8060/meu-artigo
 ```
 
 A CLI não tem refresh token: depois de 15 minutos, ela confirma um código novo.
@@ -497,18 +539,22 @@ Consumidores Kafka:
 |---|---|---|---|---|
 | `ClickConsumer` (`@KafkaListener` `click-consumer`) | `link-clicks` (3 partições, chave = id do link) | `click-consumer` | `LinkClicked` em JSON (`v`, `eventId`, `linkId`, `occurredAt`, `referrerHost`), gravado em `click_events` | 2 novas tentativas com 1 s de intervalo, depois `link-clicks-dlt`; JSON ilegível, versão desconhecida e link inexistente vão direto para a DLT |
 
-- Quem publica em `link-clicks` é o `ClickSender`, também do `analytics`, a partir da fila em memória que o
-  `redirect` alimenta a cada `GET /{code}`. O redirect nunca espera o Kafka.
+- Quem publica em `link-clicks` é o `ClickSender` do serviço `redirect`, a partir da fila em memória que cada
+  `GET /{code}` alimenta. O redirect nunca espera o Kafka. O formato do evento é o do módulo `clicks`.
 - O consumo é idempotente: o mesmo `eventId` entregue duas vezes gera um único registro.
 - Ninguém consome a `link-clicks-dlt`: ela guarda as mensagens recusadas para inspeção (no Kafdrop, por exemplo),
   e não há reprocessamento na v1.
-- Os tópicos são criados pela aplicação ao subir (`app.analytics.topic`, `app.analytics.dead-letter-topic`).
+- Os tópicos são criados pela API ao subir (`app.analytics.topic`, `app.analytics.dead-letter-topic`).
 
-**redirect** (`modules/redirect/`): o redirecionamento
+**redirect** (`apps/redirect/`, porta 8060): o redirecionamento
 
 | Método | Caminho | Auth | Sucesso | Erros principais |
 |---|---|---|---|---|
 | GET, HEAD | `/{code}` | — | 302 | 404, 410 `LINK_EXPIRED` / `LINK_DELETED`, 429 |
+
+- Não tem Spring Security nem rota autenticada. Na API, `GET /{code}` responde 401, como qualquer rota desconhecida.
+- Lê a tabela `links` da API por um pool só de leitura, e não roda migrações: o schema é da API.
+- O `GET` publica o clique; o `HEAD` responde igual, sem contar.
 
 Na API, todo erro é `application/problem+json` (RFC 9457) com um `code` estável e, em `VALIDATION_FAILED`, a lista
 `errors[]` com todos os campos inválidos de uma vez. Link de outro usuário responde 404, igual a um inexistente. Token
@@ -525,8 +571,8 @@ Limites padrão (`app.rate-limit.*`):
 | auth-server | `/oauth2/token` | IP / `client_id` dos clientes confidenciais | 30 por minuto / 600 por minuto |
 | auth-server | Pedido e confirmação de código do dispositivo | IP | 10 por minuto cada |
 | api | Criação de link | usuário | 30 por minuto |
-| api | Redirecionamento | IP | 600 por minuto |
 | api | Estatísticas do usuário | usuário | 30 por minuto |
+| redirect | Todo `GET` e `HEAD`, exceto as probes | IP | 600 por minuto |
 | bff | Início do login e do cadastro | IP | 20 por minuto |
 
 ## Testes
@@ -536,11 +582,11 @@ Limites padrão (`app.rate-limit.*`):
 ```
 
 Só exige Docker: o Testcontainers sobe PostgreSQL, Redis, Kafka e Toxiproxy reais. O build roda os testes unitários
-de cada módulo, os de integração (na API, no `auth-server` e no `bff`, porque sobem a aplicação inteira), o lint, os
-testes e o build do painel, a verificação de módulos do Spring Modulith e o gate de cobertura (JaCoCo, mínimo de 80%
-de linhas fora de configuração; hoje em torno de 97%). O gate e o relatório ficam no módulo `tools/coverage`, que
-junta a cobertura de todos: `tools/coverage/target/site/jacoco-aggregate/`. O painel tem gate próprio, de 80% de
-linhas no Vitest (`frontend/web/coverage/`).
+de cada módulo, os de integração (na API, no redirect, no `auth-server` e no `bff`, porque sobem a aplicação
+inteira), o lint, os testes e o build do painel, a verificação de módulos do Spring Modulith e o gate de cobertura
+(JaCoCo, mínimo de 80% de linhas fora de configuração; hoje em torno de 97%). O gate e o relatório ficam no módulo
+`tools/coverage`, que junta a cobertura de todos: `tools/coverage/target/site/jacoco-aggregate/`. O painel tem gate
+próprio, de 80% de linhas no Vitest (`frontend/web/coverage/`).
 
 Para testar um módulo sozinho, com os módulos de que ele depende:
 
@@ -551,8 +597,9 @@ Para testar um módulo sozinho, com os módulos de que ele depende:
 Além dos fluxos da API, os testes cobrem os cenários de falha do ADR:
 
 - o redirect segue em 302 com o Redis parado e, com ele pendurado, mantém o p99 abaixo de 50 ms;
-- o redirect não espera o Kafka pendurado, e a aplicação sobe sem Redis e sem Kafka;
-- removido com o cache quente, o link responde 410 já no acesso seguinte;
+- o redirect não espera o Kafka pendurado, e a API e o redirect sobem sem Redis e sem Kafka;
+- removido na API com o cache quente, o link responde 410 no redirect já no acesso seguinte;
+- o PostgreSQL recusa qualquer escrita pelo pool do redirect;
 - cota, alias e o primeiro acesso de um usuário novo disputados em paralelo têm um só vencedor;
 - com o `auth-server` fora, tokens de chaves já conhecidas continuam valendo; sem nenhuma chave, 503;
 - no `auth-server`: fluxos de código com PKCE e de dispositivo, cadastro, troca de senha, limites, rotação de chave e
@@ -561,7 +608,9 @@ Além dos fluxos da API, os testes cobrem os cenários de falha do ADR:
 - o rate limit responde 429 e libera as requisições com o Redis fora.
 
 Os testes da API não precisam do `auth-server`: um servidor HTTP de teste publica um JWKS com uma chave RSA de teste,
-e os tokens são assinados com ela, pelo mesmo caminho de produção. Os do BFF trocam a API e o `auth-server` por
+e os tokens são assinados com ela, pelo mesmo caminho de produção. Os do redirect não precisam da API: o schema vem
+das migrações dela, lidas da pasta `apps/api`, e os links de teste são gravados direto no banco; a API, por sua vez,
+testa o consumidor publicando no tópico os cliques no formato que o redirect usa. Os do BFF trocam a API e o `auth-server` por
 servidores HTTP falsos (repasse, renovação e revogação de token, timeouts). A stack inteira é conferida sobre o compose
 pelos testes de `e2e/`: o `e2e/cli/ponta-a-ponta.sh` e o Playwright em `e2e/playwright`, que o CI roda num job
 próprio.
@@ -570,8 +619,10 @@ próprio.
 
 | Porta | Conteúdo |
 |---|---|
-| 8080 | api: rotas `/api/v1/**`, redirecionamento, `/livez` e `/readyz` |
+| 8080 | api: rotas `/api/v1/**`, `/livez` e `/readyz` |
 | 8081 | api: actuator completo (`health`, `info`, `metrics`, `prometheus`); só para a rede interna |
+| 8060 | redirect: `GET\|HEAD /{code}`, `/livez` e `/readyz` |
+| 8061 | redirect: actuator completo; só para a rede interna |
 | 8090 | auth-server: páginas, protocolo OAuth, `/livez` e `/readyz` |
 | 8091 | auth-server: actuator completo; só para a rede interna |
 | 8070 | bff: o painel, `/livez` e `/readyz` |
@@ -580,9 +631,9 @@ próprio.
 - **Liveness** (`/livez`): só o estado da aplicação. É o que o `HEALTHCHECK` da imagem usa.
 - **Readiness** (`/readyz`): aplicação e PostgreSQL. Redis e Kafka ficam de fora de propósito: sem eles, a aplicação
   degrada, mas continua servindo.
-- **Health completo** (`:8081/actuator/health`): inclui `redis` e `kafkaPublish` (a última publicação de cliques
-  deu certo?).
-- **Métricas**: `shortener.redirect` (timer por resultado e por cache, com histograma para o p99),
+- **Health completo** (`:8081/actuator/health` na API, `:8061` no redirect): inclui `redis` e, no redirect,
+  `kafkaPublish` (a última publicação de cliques deu certo?).
+- **Métricas**: `shortener.redirect` (timer por resultado e por cache, com histograma para o p99, no redirect),
   `shortener.links.created`, `shortener.code.collisions`, `shortener.clicks.*`, `shortener.cache.errors`,
   `shortener.redis.circuit`, `shortener.ratelimit.rejected` e `shortener.ratelimit.failopen`.
 - **Logs**: JSON ECS com `traceId` e `spanId` fora do perfil `local`. Nunca registram senha, token nem URL de destino
@@ -601,10 +652,12 @@ minutos, o tempo de vida de um access token, retire a anterior.
 
 ## Limitações conhecidas
 
-- Analytics é best-effort: cliques na fila em memória se perdem num crash, e uma queda do Kafka maior que 30 s
-  (`delivery.timeout.ms`) perde os cliques do período.
+- Analytics é best-effort: cliques na fila em memória de uma instância do redirect se perdem se ela cair, e uma
+  queda do Kafka maior que 30 s (`delivery.timeout.ms`) perde os cliques do período.
 - Com o PostgreSQL fora por mais de uns 2 s, os cliques consumidos vão para a DLT; não há ferramenta de
   reprocessamento na v1.
+- O redirect lê a tabela `links` da API: uma migração que mude as colunas que ele usa (`code`, `id`, `target_url`,
+  `status`, `expires_at`) precisa ser compatível com as duas aplicações no ar ao mesmo tempo (ADR-0006, R1).
 - Códigos curtos não são controle de acesso: o rate limit encarece a varredura, mas não a impede.
 - Crawlers de pré-visualização (WhatsApp, Slack) contam como cliques.
 - Domínios internacionais precisam vir em Punycode (`xn--…`).

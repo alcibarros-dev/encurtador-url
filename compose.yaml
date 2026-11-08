@@ -1,8 +1,8 @@
 # Infraestrutura local (perfil "local"). Imagens fixadas por versão e portas presas a 127.0.0.1 (ADR-0001, D15).
 # O PostgreSQL usa a porta 5433 no host para não conflitar com outros bancos locais na 5432.
 #
-# As aplicações em container ("auth-server", "api" e "bff") só sobem com o profile "app" do compose, o das aplicações
-# (ADR-0005, D2):
+# As aplicações em container ("auth-server", "api", "redirect" e "bff") só sobem com o profile "app" do compose, o das
+# aplicações (ADR-0005, D2; ADR-0006, D1):
 #   docker compose --profile app up --build
 # Sem o profile, o compose sobe só a infraestrutura, que é o que o perfil "local" do Spring Boot usa.
 services:
@@ -162,7 +162,8 @@ services:
       redis:
         condition: service_healthy
 
-  # A API (ADR-0005, D2): links, estatísticas e redirecionamento, em http://localhost:8080.
+  # A API (ADR-0005, D2): links e estatísticas, em http://localhost:8080. Consome os cliques e grava o tombstone de
+  # remoção no cache do redirect (ADR-0006, D4 e D5).
   api:
     profiles: ["app"]
     build:
@@ -178,7 +179,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: encurtador
       SPRING_DATA_REDIS_HOST: redis
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      APP_BASE_URL: http://localhost:8080
+      # Prefixo do shortUrl: o endereço público do serviço de redirecionamento.
+      APP_BASE_URL: http://localhost:8060
       # Tokens do auth-server (ADR-0003, D6): o "iss" é a URL pública, e as chaves vêm pela rede interna. A API sobe
       # e continua validando tokens com as chaves em cache mesmo com o auth-server fora.
       APP_JWT_ISSUER: http://localhost:8090
@@ -196,7 +198,40 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # Não espera o Kafka ficar saudável: a aplicação sobe e redireciona sem ele (RNF02).
+      # Não espera o Kafka ficar saudável: a aplicação sobe sem ele (RNF02).
+      kafka:
+        condition: service_started
+
+  # Redirecionamento (ADR-0006): GET|HEAD /{code} em http://localhost:8060, o endereço dos links curtos. Escala sozinho
+  # (docker compose --profile app up --scale redirect=N, atrás de um balanceador, sem a porta fixa abaixo). Lê a
+  # tabela links da API só para leitura e não depende da API estar no ar.
+  redirect:
+    profiles: ["app"]
+    build:
+      context: .
+      args:
+        MODULE: apps/redirect
+        HTTP_PORT: 8060
+        MANAGEMENT_PORT: 8061
+    image: encurtador-redirect:local
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/encurtador
+      SPRING_DATASOURCE_USERNAME: encurtador
+      SPRING_DATASOURCE_PASSWORD: encurtador
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_BASE_URL: http://localhost:8060
+    ports:
+      - "127.0.0.1:8060:8060"
+      # Actuator completo: nunca publicar fora da máquina ou da rede interna.
+      - "127.0.0.1:8061:8061"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Não espera o Kafka ficar saudável: redireciona sem ele (RNF02). Nem a API: a tabela links já existe quando o
+      # redirect recebe o primeiro link, e as migrações são dela (ADR-0006, D2).
       kafka:
         condition: service_started
 
