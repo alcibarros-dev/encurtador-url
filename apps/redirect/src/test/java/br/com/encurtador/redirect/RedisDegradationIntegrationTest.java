@@ -91,6 +91,9 @@ class RedisDegradationIntegrationTest {
     /** Cenário 5: com o disjuntor aberto, o p99 fica abaixo de 50 ms (RNF01). */
     @Test
     void hangingRedisOpensTheBreakerAndKeepsTheRedirectFast() {
+        // Aquece o caminho (Tomcat, JDBC, Lettuce) com o Redis no ar: esta pode ser a primeira requisição da aplicação,
+        // e o limite de 500 ms abaixo é do timeout do Redis, não da JVM fria. No runner do CI, a fria passava de 700 ms.
+        assertThat(client.get("/" + code).status()).isEqualTo(302);
         redisProxy.hang();
 
         // Até o disjuntor abrir, cada requisição paga no máximo o timeout de 100 ms do comando.
