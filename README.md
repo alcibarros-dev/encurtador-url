@@ -78,8 +78,10 @@ encurtador-url/
 Na raiz ficam também o `compose.yaml`, o `Dockerfile` e o `pom.xml` que junta todos os módulos.
 
 O [mapa dos componentes](docs/componentes.html) mostra o mesmo de forma interativa: quem fala com quem na stack do
-compose, o grafo de módulos e um inventário, com a simulação da queda de cada serviço. É uma página só, sem build: abra
-o arquivo direto no navegador.
+compose, o grafo de módulos, os fluxos principais passo a passo e um inventário, com a simulação da queda de cada
+serviço. Cada nó, aresta, selo e passo abre uma ficha (páginas do painel, endpoints com requisição e respostas,
+tópicos, tabelas, chaves do Redis, regras de rate limit, clientes OAuth e códigos de erro), que leva às próximas. É
+uma página só, sem build: abra o arquivo direto no navegador.
 
 Dependências entre módulos:
 
