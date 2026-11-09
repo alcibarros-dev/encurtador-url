@@ -991,13 +991,13 @@
       },
       {
         id: 'auth-server', label: 'auth-server', sub: ':8090', kind: 'app', group: 'apps', x: 560, y: 90,
-        badges: ['ratelimit', 'disjuntor'], addr: 'http://localhost:8090', image: 'ghcr.io/alcibarros-dev/auth:0.2.0',
+        badges: ['ratelimit', 'disjuntor'], addr: 'http://localhost:8090', image: 'ghcr.io/alcibarros-dev/auth:0.3.0',
         info: {
           resumo: 'Servidor de autorização (Spring Authorization Server): credenciais, login, cadastro, troca de senha e emissão dos access tokens RS256. Vem pronto do repositório auth, como imagem, e sobe com a infraestrutura.',
           campos: [
             ['Código', '[auth](https://github.com/alcibarros-dev/auth), módulo `server`'],
             ['Portas', '8090 · actuator na 8091'],
-            ['Imagem', '[`ghcr.io/alcibarros-dev/auth:0.2.0`](https://github.com/users/alcibarros-dev/packages/container/package/auth), publicada pelo CI do repositório auth; `AUTH_IMAGE_TAG` troca a versão'],
+            ['Imagem', '[`ghcr.io/alcibarros-dev/auth:0.3.0`](https://github.com/users/alcibarros-dev/packages/container/package/auth), publicada pelo CI do repositório auth; `AUTH_IMAGE_TAG` troca a versão'],
             ['Configuração', '`infra/auth-server/application.yml`, montado em `/config/application.yml`'],
             ['Clientes', '`encurtador-cli`, `encurtador-web` e `encurtador-dev`'],
             ['Access token', 'JWT RS256 de 15 min, com `aud` `encurtador-api` e `kid`'],

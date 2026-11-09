@@ -246,7 +246,7 @@ na versão fixada no `compose.yaml` (`AUTH_IMAGE_TAG` troca a versão). Os clien
 nome das páginas ficam em [`infra/auth-server/application.yml`](infra/auth-server/application.yml), que o compose
 monta no container. Para mexer no próprio servidor ou nas bibliotecas de segurança, use o repositório
 [auth](https://github.com/alcibarros-dev/auth). Para testar aqui uma mudança de lá antes de publicá-la,
-construa a imagem lá com a tag que o compose usa (`docker build -t ghcr.io/alcibarros-dev/auth:0.2.0 .`) e instale as
+construa a imagem lá com a tag que o compose usa (`docker build -t ghcr.io/alcibarros-dev/auth:0.3.0 .`) e instale as
 bibliotecas no `~/.m2` com `./mvnw install`, com a versão do `auth.version`.
 
 **Subir a versão do auth:** publique a versão nova no repositório `auth` (tag `vX.Y.Z`, que publica a imagem e as

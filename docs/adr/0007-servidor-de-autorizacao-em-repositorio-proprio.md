@@ -65,7 +65,7 @@ do compose local como padrão.
 
 O CI do repositório novo testa e publica a imagem no GitHub Container Registry, para `linux/amd64` e `linux/arm64`:
 `:main` e `:sha-<commit>` a cada push na `main`, e `:X.Y.Z`, `:X.Y` e `:latest` a cada tag `vX.Y.Z`. O `compose.yaml`
-do encurtador fixa a versão (`ghcr.io/alcibarros-dev/auth:${AUTH_IMAGE_TAG:-0.2.0}`); subir de versão é mudar esse
+do encurtador fixa a versão (`ghcr.io/alcibarros-dev/auth:${AUTH_IMAGE_TAG:-0.3.0}`); subir de versão é mudar esse
 número, de propósito. O repositório e a imagem são públicos: o compose e o CI baixam sem login, e o `ghcr.io` não
 cobra imagens públicas.
 
@@ -169,5 +169,8 @@ do Java 25) e do Maven Central (conta, namespace e assinatura GPG):
   endereços que o GitHub exige (`github.com/<dono>/auth`, `ghcr.io/<dono>/auth`, `maven.pkg.github.com/<dono>/auth`):
   tirá-lo daí exigiria uma organização, e o dono do projeto preferiu manter a conta pessoal. O encurtador passa para a
   0.2.0, na imagem e nas bibliotecas.
+- **0.3.0** (2026-11-09): o `auth-security` deixa de publicar o nome do encurtador fixo na metadata da RFC 9728
+  (`/.well-known/oauth-protected-resource`); cada API declara o seu em `app.jwt.resource-name`, e a daqui declara
+  "Encurtador de URLs". O repositório `auth` ganha ADRs próprios (`docs/adr`), que os comentários de lá passam a citar.
 - Antes da primeira publicação, os jars `0.1.0` foram instalados no `~/.m2` a partir de uma cópia do `auth` com a
   versão trocada, e a imagem foi construída localmente com a tag que o compose usa.

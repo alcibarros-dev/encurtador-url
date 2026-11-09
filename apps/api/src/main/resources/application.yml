@@ -99,6 +99,8 @@ app:
     audience: encurtador-api
     jwk-set-uri: http://localhost:8090/oauth2/jwks
     clock-skew: 5s
+    # Nome legível da API em /.well-known/oauth-protected-resource (RFC 9728).
+    resource-name: Encurtador de URLs
   links:
     # 62^7 ≈ 3,5 × 10^12 códigos (ADR-0001, §1.5 e D3).
     code-length: 7

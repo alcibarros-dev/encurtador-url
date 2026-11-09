@@ -119,7 +119,7 @@ services:
   # valida. Vem pronto do repositório auth, na versão fixada abaixo (AUTH_IMAGE_TAG troca a versão).
   # Faz parte da infraestrutura, sem o profile "app": o spring-boot:run da API e do BFF o sobe junto com o banco.
   auth-server:
-    image: ghcr.io/alcibarros-dev/auth:${AUTH_IMAGE_TAG:-0.2.0}
+    image: ghcr.io/alcibarros-dev/auth:${AUTH_IMAGE_TAG:-0.3.0}
     # Usa a chave de .secrets/auth-signing-key.pem se ela existir (gere com o comando do README). Sem ela, a chave é
     # gerada na subida, com kid único, e os tokens emitidos deixam de valer quando o container reinicia. A imagem em
     # si só lê a chave de AUTH_SIGNING_KEY_FILE.

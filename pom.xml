@@ -41,7 +41,7 @@
         <jacoco.version>0.8.16</jacoco.version>
         <jacoco.minimum-line-coverage>0.80</jacoco.minimum-line-coverage>
         <!-- Versão das bibliotecas de segurança do repositório auth; a mesma da imagem do auth-server no compose -->
-        <auth.version>0.2.0</auth.version>
+        <auth.version>0.3.0</auth.version>
         <!-- Só as aplicações (apps/api, apps/redirect, apps/bff) rodam com spring-boot:run; as bibliotecas o
              ignoram. Na raiz, sobe a API, a primeira do reactor; cada aplicação roda com -pl apps/<aplicação> -am
              (ADR-0005, D7; ADR-0006, D1). O servidor de autorização vem como imagem, pelo compose (ADR-0007) -->
