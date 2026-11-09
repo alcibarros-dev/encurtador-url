@@ -123,7 +123,7 @@ test('cadastro, links, estatísticas, troca de senha e saída', async ({ page, r
     await page.getByRole('button', { name: 'Trocar senha' }).click();
     await expect(page.getByRole('heading', { name: 'Senha alterada' })).toBeVisible();
     await expectAccessible(page);
-    await page.getByRole('link', { name: 'Voltar ao painel' }).click();
+    await page.getByRole('link', { name: 'Voltar à aplicação' }).click();
     await expect(page).toHaveURL(/\/conta$/);
   });
 
